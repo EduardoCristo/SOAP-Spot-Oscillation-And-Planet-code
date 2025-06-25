@@ -1,0 +1,24 @@
+[project]
+name = "SOAP"
+version = "4.0.0"
+description = "Spots, oscillations and planets"
+authors = [
+    { name = "IA", email = "geral@iastro.pt" }
+]
+license = { text = "GPL-3.0-or-later" }
+urls = { "Source" = "https://github.com/EduardoCristo/SOAP-Spot-Oscillation-And-Planet-code" }
+keywords = ["astronomy", "astrophysics", "spectroscopy"]
+dynamic = ["dependencies"]
+
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["SOAP"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.package-data]
+SOAP= ['SOAP/*']
