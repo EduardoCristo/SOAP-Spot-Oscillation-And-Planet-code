@@ -1,4 +1,4 @@
-# Copyright (C) 2020-2022 Institute of Astrophysics and Space Sciences
+# Copyright (C) 2020-2025 Institute of Astrophysics and Space Sciences
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -235,42 +235,70 @@ class output:
 
 
 class Simulation:
-    """
-    Create a SOAP simulation
 
-    Args:
-        star (:class:`SOAP.Star`):
-            The star to be simulated. By default, this is the Sun (with
-            Prot=25.05 days).
-        pixel (:class:`SOAP.CCF` or :class:`SOAP.Spectrum`):
-            The CCF or spectrum to attribute to each pixel in the quiet star.
-            Default is the solar CCF.
-        pixel_spot (:class:`SOAP.CCF` or :class:`SOAP.Spectrum`):
-            The CCF or spectrum corresponding to the spot(s). Default is the
-            solar spot CCF.
-        active_regions (list):
-            A list of :class:`SOAP.ActiveRegion` instances, with the active
-            regions to be included in the simulation.
-        nrho (int):
-            Resolution for the active region's circumference. Default: 20
-        grid (int):
-            Stellar grid resolution (grid x grid). Default is 300
-        inst_reso (int):
-            Resolution of the spectrograph (115000 for HARPS, 0 for FTS
-            resolution) Default is 115000
-        wlll (double, optional):
-            Observation wavelength for temperature contrast by Planck's law, in
-            Angstrom. Default is 5293.4115 (mean of Kitt peak spectrum used to
-            calculate solar CCF)
-        resample_spectra (int, optional):
-            Resample the quiet star and spot spectra by this amount. Has no
-            effect if using a CCF.
-        interp_strategy (str, optional):
-            If using a spectrum for the pixel, how to do interpolation of
-            `pixel` and `pixel_spot` to a common wavelength array. Default is
-            'spot2quiet', which interpolates `pixel_spot` to `pixel`'s
-            wavelength array. Another option is 'quiet2spot'.
     """
+    Simulation class for SOAP simulations.
+    This class encapsulates the configuration and execution of SOAP simulations, which model the photometric and spectroscopic effects of stellar activity and planetary transits on observed signals.
+    
+    Attributes:
+        star (SOAP.Star): 
+            The star to be simulated. Defaults to the Sun if not provided.
+        planet (SOAP.Planet): 
+            The planet to be simulated. Defaults to a template planet if not provided.
+        pixel (SOAP.CCF or SOAP.Spectrum): 
+            The CCF or spectrum for each pixel in the quiet star. Defaults to solar CCF.
+        pixel_spot (SOAP.CCF or SOAP.Spectrum): 
+            The CCF or spectrum for the spot(s). Defaults to solar spot CCF.
+        active_regions (list of SOAP.ActiveRegion): 
+            List of active regions to include in the simulation.
+        ring (SOAP.Ring): 
+            Optional ring system for the planet.
+        nrho (int): 
+            Resolution for the active region's circumference.
+        grid (int): 
+            Stellar grid resolution (grid x grid).
+        inst_reso (int): 
+            Spectrograph resolution.
+        wlll (float): 
+            Observation wavelength for temperature contrast by Planck's law, in Angstrom.
+        resample_spectra (int): 
+            Resample the quiet star and spot spectra by this amount. No effect if using a CCF.
+        interp_strategy (str): 
+            Strategy for interpolating pixel and pixel_spot to a common wavelength array.
+        verbose (bool): 
+            If True, prints additional information during simulation.
+    
+    Methods:
+        get_results(rv, CCFs, skip_fwhm=False, skip_bis=False):
+            Compute RV, FWHM, and BIS for a sequence of CCFs.
+        set(**kwargs):
+            Set multiple attributes of the simulation at once.
+        set_pixel(pixel, pixel_spot=None, pixel_plage=None):
+            Set the pixel, pixel_spot, and optionally pixel_plage for the simulation.
+        plot(psi=None, **kwargs):
+            Plot the simulation results.
+        visualize(output, plot_type, lim=None, ref_wave=0, plot_lims=None, show_data=True):
+            Visualize the simulation output.
+        visualize_animation(output, plot_type, lim=None, ref_wave=0, plot_lims=None, interval=100, repeat=True):
+            Create an animated visualization of the simulation.
+        plot_surface(psi=None, fig=None, colors=("m", "b"), plot_time=None):
+            Plot the stellar surface.
+        add_random_active_regions(N=2, plage=False):
+            Add N random active regions (spots or plages) to the simulation.
+        run_itot(skip_rv=False, cache=True):
+            Calculate the CCF and total flux for the quiet star.
+        calculate_signal(psi=None, skip_itot=True, skip_rv=False, skip_fwhm=False, skip_bis=False, renormalize_rv=True, save_ccf=False, template=None, itot=None, **kwargs):
+            Estimate photometric and spectroscopic effects for the simulation over a grid of stellar rotation phases.
+        config_export(simVar="sim", show_all=False):
+            Export the simulation configuration as a string for easy re-import.
+    
+    Properties:
+        _ccf_mode: Returns True if the simulation is in CCF mode.
+        has_planet: Returns True if a planet is present in the simulation.
+        has_active_regions: Returns True if active regions are present.
+        has_ring: Returns True if the planet has a ring system.
+    """
+
 
     def __init__(
         self,
@@ -457,10 +485,6 @@ class Simulation:
                 The CCF for the spots
             pixel_plage (SOAP.CCF or SOAP.Spectrum):
                 The CCF for the plages
-
-        Examples:
-            sim.set_pixel( SOAP.gaussianCCF() )
-            sim.set_pixel( SOAP.solarCCF(sim.star.vrot) ) # this is the default
         """
         pixel.vrot = self.star.vrot
         self.pixel = pixel
@@ -592,29 +616,25 @@ class Simulation:
         **kwargs,
     ):
         """
-        Estimate the photometric and spectrocopic effects for this simulation,
-        on a grid of stellar rotation phases `psi`.
+        Estimates the photometric and spectroscopic effects for a simulation over a grid of stellar rotation phases.
 
-        Parameters
-        ----------
-        psi : array_like [default psi=linspace(0, 1, 501)]
-            Phases at which the signals will be calculated (in units of the
-            stellar rotation period)
-        skip_itot : bool, default False
-            Only do the calculation of the quiet star once (and cache it)
-        skip_rv : bool, default False
-            If True, skip calculating the RV signal
-        renormalize_rv : bool, default True
-            Set RV when the spot is not visible to 0
-        save_ccf : bool, default False
-            Save the output CCFs to a file
-        template : dict, default None
-            User provided template dictionary with the keywords "wave" (nm) and "flux" containing the wavelength and flux arrays.
+        Attributes:
+            psi (array_like): Phases at which the signals will be calculated (in units of the stellar rotation period).
+            skip_itot (bool): If True, only calculate the quiet star once and cache it.
+            skip_rv (bool): If True, skip calculating the RV signal.
+            skip_fwhm (bool): If True, skip calculating the FWHM signal.
+            skip_bis (bool): If True, skip calculating the BIS signal.
+            renormalize_rv (bool): If True, set RV when the spot is not visible to 0.
+            save_ccf (bool): If True, save the output CCFs to a file.
+            template (dict): Input spectrum to construct the CCF. Must contain: "wave" (nm) and "flux" arrays.
+            itot (tuple): Precomputed quiet star pixel and flux to use instead of recalculating.
+            **kwargs: Additional keyword arguments.
 
-        Returns
-        -------
-        out : instance of `output`
-            Contains psi, flux, and rv (if skip_rv=False) as attributes
+        Returns:
+            output: Instance containing psi, flux, rv, rv_bconv, rv_flux, ccf_fwhm, ccf_bis, ccf_depth, itot_quiet, and itot_flux as attributes.
+
+        Raises:
+            ValueError: If input parameters are invalid.
         """
         # deal with the phases array
         if psi is None:
@@ -1033,27 +1053,28 @@ class Simulation:
                     )
                 )
             )
-            planet_phases = psi * self.star.prot / self.planet.P
-            phase_mask = np.logical_or(
-                planet_phases < -tr_dur / 2, planet_phases > tr_dur / 2
-            )
-            # Note: There is not effect of the keplerian here, so everything is in the stellar rest-frame unless we have 
-            # a AR
-            rv_tot_out = rv_tot[phase_mask]
-            psi_out = planet_phases[phase_mask]
-
-            slope_coefs = np.polyfit(psi_out, rv_tot_out, deg=1)
-
-            slope_rvs = slope_coefs[0] * planet_phases + slope_coefs[1]
-
-            if DEBUG == True:
-                print("Slopes coefficients out-of-transit")
-                print(slope_coefs)
-                print("RVs out-of-transit")
-                print(rv_tot_out)
-                print("RVs obtained from a linear fit from the out-of-transit")
-                print(slope_rvs)
             try:
+                planet_phases = psi * self.star.prot / self.planet.P
+                phase_mask = np.logical_or(
+                    planet_phases < -tr_dur / 2, planet_phases > tr_dur / 2
+                )
+                # Note: There is not effect of the keplerian here, so everything is in the stellar rest-frame unless we have 
+                # a AR
+                rv_tot_out = rv_tot[phase_mask]
+                psi_out = planet_phases[phase_mask]
+
+                slope_coefs = np.polyfit(psi_out, rv_tot_out, deg=1)
+
+                slope_rvs = slope_coefs[0] * planet_phases + slope_coefs[1]
+
+                if DEBUG == True:
+                    print("Slopes coefficients out-of-transit")
+                    print(slope_coefs)
+                    print("RVs out-of-transit")
+                    print(rv_tot_out)
+                    print("RVs obtained from a linear fit from the out-of-transit")
+                    print(slope_rvs)
+
                 corr_pixel_flux = np.array(
                     [
                         stspnumba.doppler_shift(pixel.wave, pixel_tot[i], -slope_rvs[i])
@@ -1103,8 +1124,8 @@ class Simulation:
             else:
                 # shift by the Keplerian RV
                 for i in range(pixel_tot.shape[0]):
-                    pixel_tot[i] = stspnumba.shift_ccf(
-                        pixel.rv, pixel_tot[i], rv_kep[i].value
+                    pixel_tot[i] = stspnumba.linear_interpolator(
+                        pixel.rv, pixel_tot[i], pixel.rv-rv_kep[i].value
                     )
 
             # add Keplerian signal to final RVs

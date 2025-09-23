@@ -11,3 +11,5 @@ airvacuumvald
 better_uniform
 intervaltree
 requests
+expecto
+LDTk

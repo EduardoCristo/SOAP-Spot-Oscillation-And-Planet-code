@@ -32,32 +32,33 @@ def set_object_attributes(object, attrs):
 
 
 class Star:
-    """This object holds information about the star
+    """
+    A star object holding stellar parameters.
 
-    Parameters
-    ----------
-    prot : float
-        Stellar rotation period [days]. If differential rotation is on, this is
-        the rotation period at the equator.
-    incl : float
-        Inclination of the rotational axis [degrees]
-    diffrotB, diffrotC : float
-        Coefficients for the latitudinal differential rotation
-            w(lat) = w_eq - diffrotB * sin^2(lat) - diffrotC * sin^4(lat)
-        (NOTE the minus signs!)
-    cb1: float
-        Absolute value of the convective blueshift (m/s)
-        V_CB=cb1*r*cos(theta)
-    u1, u2 : float
-        Linear and quadratic coefficients of the quadratic limb-darkening law
-    radius : float
-        Stellar radius [Rsun]
-    mass : float
-        Stellar mass [Msun]
-    teff : float
-        Effective temperature of the star [K]
-    start_psi : float
-        Starting phase [in units of rotation period]
+    Args:
+        prot (float):
+            Stellar rotation period [days]. If differential rotation is on, this is
+            the rotation period at the equator.
+        incl (float):
+            Inclination of the rotational axis [degrees].
+        diffrotB (float, optional):
+            Coefficient for latitudinal differential rotation (sin^2 term).
+        diffrotC (float, optional):
+            Coefficient for latitudinal differential rotation (sin^4 term).
+        cb1 (float, optional):
+            Absolute value of the convective blueshift (m/s).
+        u1 (float, optional):
+            Linear coefficient of the quadratic limb-darkening law.
+        u2 (float, optional):
+            Quadratic coefficient of the quadratic limb-darkening law.
+        radius (float, optional):
+            Stellar radius [R_sun].
+        mass (float, optional):
+            Stellar mass [M_sun].
+        teff (float, optional):
+            Effective temperature of the star [K].
+        start_psi (float, optional):
+            Starting phase [in units of rotation period].
     """
 
     @maybe_quantity_input(
@@ -132,24 +133,29 @@ class Star:
 
 
 class ActiveRegion:
-    """An active region (spot or plage)
-
-    Parameters
-    ----------
-    lon, lat : float
-        Longitude and latitude of the active region [degree]
-    size : float
-        The size of the active region, in units of stellar radius. To get a size
-        S1 in area of the visible hemisphere, provide sqrt(2*S1).
-        Example: for 0.1% of the visible hemisphere, provide 0.045
-    active_region_type : int
-        Either 0 for a spot or 1 for a plage. By default, a spot.
-    temp_diff : float, default 663K for spots and -250K for plage
-        Temperature difference between active region and the surface [K]
-    check : boolean
-        Turn this active region on (check=True) or off (check=False)
     """
+    Represents an active region (spot or facula) on a stellar surface.
 
+    Attributes:
+        lon (float or astropy.Quantity): Longitude of the active region.
+        lat (float or astropy.Quantity): Latitude of the active region.
+        size (float): Size of the active region.
+        active_region_type (int): 0 for spot, 1 for plage.
+        temp_diff (float or astropy.Quantity): Temperature difference [K].
+        check (bool): Whether the region is active.
+
+    Methods:
+        random(ARtype="spot"): Create a random active region of the specified type.
+        set(**kwargs): Set attributes of the active region.
+        get_size(t): Get the size of the active region as a function of time.
+
+    Properties:
+        type (str): Active region type, either "spot" or "plage".
+        size_area_visible_hemisphere (float): Size of the active region in area of the visible hemisphere.
+
+    Raises:
+        ValueError: If active_region_type is not 0/1 or "spot"/"plage".
+    """
     _temperature_differences = {"spot": 663 * U.K, "plage": 250 * U.K}
     _default_temp_diff = True
 
@@ -443,17 +449,38 @@ class CCF:
     @maybe_quantity_input(rv=kms)
     def __init__(self, rv, intensity, normalize=True, convolved=False):
         """
-        Arguments
-        ---------
-        rv : array
-            RV array where the CCF is defined [km/s or astropy unit]
-        intensity : array
-            CCF array
-        normalize : bool
-            Whether to normalize the CCF by its median
-        convolved : bool
-            Whether the CCF is already convolved with the instrumental profile
+        Initialize the CCF object.
+
+        Parameters
+        ----------
+        rv : array-like
+            Radial velocity array where the CCF is defined [km/s or astropy unit].
+        intensity : array-like
+            CCF intensity array.
+        normalize : bool, optional
+            If True, normalize the CCF by its median. Default is True.
+        convolved : bool, optional
+            If True, indicates that the CCF is already convolved with the instrumental profile. Default is False.
+
+        Attributes
+        ----------
+        rv : array-like
+            Radial velocity array.
+        intensity : array-like
+            Normalized or raw CCF intensity array.
+            Indicates if the CCF is convolved.
+        n : int
+            Number of points in the CCF.
+        step : float
+            Step size between consecutive RV points.
+        width : float
+            Maximum absolute value of RV, representing the CCF width.
+        _rv_units : astropy.units.Unit
+            Units of the RV array.
+        _vrot : astropy.units.Quantity
+            Rotational velocity, initialized to zero.
         """
+
         self.rv = rv
         if normalize:
             self.intensity = intensity / np.median(intensity)
@@ -480,7 +507,7 @@ class CCF:
     def n_v(self):
         """
         Total number of RV bins in the CCF after considering a stellar rotation
-        velocity equal to self.vrot.
+        velocity equal to vrot
         """
         # The CCF is assumed to have a rotational velocity equal to 0 because it
         # is taken in the stellar disk center. To consider rotation when
@@ -661,7 +688,7 @@ class Spectrum:
 
     @property
     def vrot(self):
-        """Rotation velocity of the star to which the CCF is associated"""
+        """Rotation velocity of the star"""
         return self._vrot
 
     @property

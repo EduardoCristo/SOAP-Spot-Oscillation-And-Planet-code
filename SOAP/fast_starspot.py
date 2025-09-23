@@ -1,9 +1,8 @@
 from concurrent.futures import ProcessPoolExecutor
-
 import numba
 import numpy as np
-from numba import float64, int32, prange
 from numpy import cos, pi, sin
+from numba import float64, int32, prange
 from scipy import signal
 from .utils import c
 
@@ -12,12 +11,37 @@ c = c.value
 
 @numba.njit(cache=True)
 def sincos(x: float64) -> np.ndarray:
+    """
+    Calculate the sine and cosine of a number using Numba's math module.
+
+    Arguments
+    ---------
+    x : float64
+        The input value in radians.
+    Returns
+    -------
+    np.ndarray
+        An array containing the sine and cosine of the input value.
+    """
     return [numba.math.sin(x), numba.math.cos(x)]
 
 
 @numba.njit("f8(f8, f8)", cache=True)
 def planck_law(λ, T):
-    """Calculates the Planck function"""
+    """
+    Calculate the Planck function for a given wavelength and temperature.
+
+    Arguments
+    ---------
+    λ : float
+        Wavelength in Angstroms.
+    T : float
+        Temperature in Kelvin.
+    Returns
+    -------
+    float
+        The value of the Planck function at the given wavelength and temperature.
+    """
     h = 6.62607015e-34  # Planck constant
     k_b = 1.380649e-23  # Boltzmann constant
     return 2 * h * c**2 * 1 / λ**5 * 1 / (np.exp((h * c) / (λ * k_b * T)) - 1)
@@ -50,61 +74,49 @@ def itot_flux(u1: np.float64, u2: np.float64, grid: np.int32):
             # which means that we are on the stellar disc
             if (y**2 + z**2) <=1:
                 _, limb = ld(y, z, u1, u2)
-                # calculates the total flux taking into account the limb-darkening
-                # (intensity_ccf_shift[0] is very close to 1)
-                # total += intensity_ccf_shift[0] * limb
-                total+= limb
+                total+= limb # check this
 
     return total
 
-@numba.njit(cache=True)
-def shift_ccf(rv, ccf, v_shift):
-    # Shift the CCF with a given velocity v_shift, by linear interpolation
-    ccf_derivative = np.empty_like(rv)
-    ccf_shifted = np.empty_like(rv)
-    N = rv.size
-
-    # Calculates the CCF derivative
-    if rv[1] - rv[0] == 0:
-        ccf_derivative[0] = 0
-    else:
-        ccf_derivative[0] = (ccf[1] - ccf[0]) / (rv[1] - rv[0])
-
-    for i in range(rv.size - 1):
-        if rv[i + 1] - rv[i] == 0:
-            ccf_derivative[i] = ccf_derivative[i - 1]
-        else:
-            ccf_derivative[i] = (ccf[i + 1] - ccf[i]) / (rv[i + 1] - rv[i])
-    ccf_derivative[N - 1] = 0.0
-
-    # Calculates the new values of the shifted CCF doing a linear interpolation
-    for i in range(N):
-        if v_shift >= 0 or i == 0:
-            ccf_shifted[i] = ccf[i] - v_shift * ccf_derivative[
-                i]  # dy/dx = derivative => dy = derivative*dx
-        elif v_shift < 0:
-            ccf_shifted[i] = ccf[i] - v_shift * ccf_derivative[
-                i - 1]  # dy/dx = derivative => dy = derivative*dx
-
-    return ccf_shifted
-
-##
 @numba.njit(cache=True, nopython=True)
 def doppler_shift_wave(wave: np.ndarray, rv: float):
+    """
+    Doppler shift the wavelength array by a given radial velocity.
+    Arguments
+    ---------
+    wave : np.ndarray
+        Wavelength array in Angstroms.
+    rv : float
+        Radial velocity in km/s.
+    Returns
+    -------
+    np.ndarray
+        Doppler-shifted wavelength array.
+    """
     return wave * (1.0 - rv / c)
 
 
 @numba.njit(cache=True, nopython=True)
 def doppler_shift(wave: np.ndarray, flux: np.ndarray, rv: float):
     """
-    Doppler shift a spectrum (wave, flux) by radial velocity `rv`, using linear
-    interpolation
+    Doppler shift a spectrum (wave, flux) by given radial velocity and return the flux in the original wavelength array.
+    Arguments
+    ---------
+    wave : np.ndarray
+        Wavelength array in Angstroms.
+    flux : np.ndarray
+        Spectrum flux array.
+    rv : float
+        Radial velocity in km/s.
+    Returns
+    -------
+    np.ndarray
+        Doppler-shifted flux array interpolated to the original wavelength array.
     """
     new_wave = doppler_shift_wave(wave, rv)
     return linear_interpolator(wave, flux, new_wave)
 
 
-# Here we modified the code a little bit
 @numba.njit(cache=True, nopython=True)
 def ld(y: float, z: float, u1: float, u2: float):
     """
@@ -117,98 +129,127 @@ def ld(y: float, z: float, u1: float, u2: float):
         u1 (float): Limb-darkening linear coefficient
         u2 (float): Limb-darkening quadratic coefficient
     """
-    # sqrt(r^2-(y^2+z^2)) where r=1
-    # This is equal to 1 at the disc center, and 0 on the limb.
     r_cos = np.sqrt(1.0 - (y * y + z * z))
     return r_cos, 1.0 - u1 * (1.0 - r_cos) - u2 * (1.0 - r_cos) * (1.0 - r_cos)
 
 
 @numba.njit(cache=True, nopython=True)
-def vrot(Ω, r_cos, y, z, αB, αC, i, cb1):
-    # add latitute as input in the future...
+def vrot(v_eq, r_cos, y, z, alphaB, alphaC, i, cb1):
     """
-    Calculate the velocity due to rotation at position (y,z) in the stellar
-    surface, including differential rotation.
+    Calculate the projected rotational velocity (line-of-sight) at position (y,z)
+    on the stellar surface, using linear equatorial velocity and differential rotation.
+
+    Parameters
+    ----------
+    v_eq : float
+        Equatorial linear velocity [m/s]
+    r_cos : float
+        Projected distance from rotation axis (≈ R cos(latitude))
+    y : float
+        Sky-projected y-position (in rotation direction)
+    z : float
+        Projected height along rotation axis
+    alphaB : float
+        Relative coefficient for sin²(latitude) term
+    alphaC : float
+        Relative coefficient for sin⁴(latitude) term
+    i : float
+        Inclination angle [radians]
+    cb1 : float
+        Additional constant velocity term (e.g. convective blueshift) [m/s]
+
+    Returns
+    -------
+    delta : float
+        Line-of-sight rotational velocity at (y,z) [m/s]
     """
+    # Approximate latitude using projection geometry
     latitude = z * sin(i) + r_cos * cos(i)
-    delta_z = Ω * (1 - αB * latitude**2 - αC * latitude**4)
-    delta = y * delta_z * sin(i)
-    delta += (cb1 / 1000) * r_cos
+
+    # Differential linear velocity profile
+    v = v_eq * (1 - alphaB * latitude**2 - alphaC * latitude**4)
+
+    # Projected velocity along line of sight
+    delta = y * v * sin(i)
+
+    # Convective blueshift
+    delta += (cb1 / 1000.0) * r_cos  # cb1 is assumed to be in m/s
+
     return delta
 
-
-@numba.njit(cache=True, nopython=True)
+@numba.njit(parallel=True, cache=True)
 def itot_spectrum_par(
-    Ω: float64,
+    v_eq: float64,
     i: float64,
     u1: float64,
     u2: float64,
-    αB: float64,
-    αC: float64,
+    alphaB: float64,
+    alphaC: float64,
     cb1: float64,
     grid: int32,
     spec,
 ) -> np.ndarray:
-    i = i * pi / 180.0  # [degree] --> [radian]
-    # step of the grid. grid goes from -1 to 1, therefore 2 in total
+    """
+    Calculate the spectrum in each cell of the grid and integrate over the entire
+    stellar disc.
+    This function uses parallel processing to speed up the calculation.
+    Arguments
+    ---------
+    v_eq : float64
+        Equatorial linear velocity in km/s.
+    i : float64
+        Inclination angle in degrees.
+    u1 : float64
+        Quadratic limb-darkening coefficient.
+    u2 : float64
+        Quadratic limb-darkening coefficient.
+    alphaB : float64
+        Relative coefficient for sin²(latitude) term.
+    alphaC : float64
+        Relative coefficient for sin⁴(latitude) term.
+    cb1 : float64
+        Additional constant velocity term (e.g. convective blueshift) in m/s.
+    grid : int32
+        Grid size (number of cells along one dimension).
+    spec : Spectrum
+        Spectrum object containing wavelength and flux data.
+    Returns
+    -------
+    np.ndarray
+        Integrated spectrum over the entire stellar disc.
+    """
+    i = i * np.pi / 180.0  # Convert degrees to radians
     delta_grid = 2.0 / grid
     wave_size = len(spec.wave)
-    total_spectrum = np.zeros(wave_size)
     y_positions = np.linspace(-1.0 + delta_grid / 2.0, 1.0 - delta_grid / 2.0, grid)
     z_positions = np.linspace(-1.0 + delta_grid / 2.0, 1.0 - delta_grid / 2.0, grid)
-    # Scan of each cell on the grid
+
+    # Each thread writes to its own copy
+    thread_spectra = np.zeros((grid, wave_size))
+
     for iy in prange(grid):
-        total_spectrum_y = np.zeros(wave_size)
         y = y_positions[iy]
+        local_spectrum = np.zeros(wave_size)
         for iz in range(grid):
             z = z_positions[iz]
 
-            # projected radius on the sky smaller than 1,
-            # which means that we are on the stellar disc
             if (y**2 + z**2) <= 1.0:
                 r_cos, limb = ld(y, z, u1, u2)
-                delta = vrot(Ω, r_cos, y, z, αB, αC, i, cb1)
+                delta = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i, cb1)
                 shifted_spectrum = doppler_shift(
                     spec.wave, spec.flux(r_cos), delta * 1e3
                 )
-                total_spectrum_y += shifted_spectrum * limb
-        total_spectrum += total_spectrum_y
+                local_spectrum += shifted_spectrum * limb
 
+        thread_spectra[iy, :] = local_spectrum
+
+    # Reduce the result after the parallel loop
+    total_spectrum = np.sum(thread_spectra, axis=0)
     return total_spectrum
 
 
-# @numba.njit(nopython=True, cache=True)
-# def linear_interpolator(x, y, new_x):
-#     """
-#     Linear interpolator compatible with Numba.
-
-#     Parameters:
-#     - x (ndarray): The x-coordinates of the data points (sorted).
-#     - y (ndarray): The y-coordinates of the data points.
-#     - new_x (ndarray): The new x-coordinates for which to interpolate.
-
-#     Returns:
-#     - ndarray: The interpolated values corresponding to new_x.
-#     """
-#     interpolated_values = np.empty_like(new_x)
-#     i = 0
-#     for idx, new_x_val in enumerate(new_x):
-#         # Check if new_x_val is outside the range of x
-#         if new_x_val < x[0]:
-#             interpolated_values[idx] = y[0]
-#         elif new_x_val > x[-1]:
-#             interpolated_values[idx] = y[-1]
-#         else:
-#             while x[i + 1] < new_x_val:
-#                 i += 1
-#             # Linear interpolation
-#             slope = (y[i + 1] - y[i]) / (x[i + 1] - x[i])
-#             interpolated_values[idx] = y[i] + slope * (new_x_val - x[i])
-
-#     return interpolated_values
-
 @numba.njit(nopython=True, cache=True)
-def linear_interpolator(x, y, new_x):
+def linear_interpolator(x:np.ndarray, y: np.ndarray, new_x:np.ndarray) -> np.ndarray:
     """
     Cubic Hermite spline interpolator compatible with Numba.
     
@@ -273,12 +314,12 @@ def linear_interpolator(x, y, new_x):
 # stellar disc
 @numba.njit(cache=True, nopython=True)
 def itot_rv(
-    Ω: float64,
+    v_eq: float64,
     i: float64,
     u1: float64,
     u2: float64,
-    αB: float64,
-    αC: float64,
+    alphaB: float64,
+    alphaC: float64,
     cb1: float64,
     grid: int32,
     rv: np.ndarray,
@@ -306,7 +347,7 @@ def itot_rv(
             if (y**2 + z**2) <=1:
                 # r_cos = np.sqrt(1.0 - (y * y + z * z))
                 r_cos, limb = ld(y, z, u1, u2)
-                delta = vrot(Ω, r_cos, y, z, αB, αC, i, cb1)
+                delta = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i, cb1)
                 f_star += linear_interpolator(rv, ccf, rv_vrot - delta) * limb
                 total += limb
 
@@ -315,7 +356,7 @@ def itot_rv(
 
 @numba.njit(cache=True, nopython=True)
 def spot_init(
-    s: float64, longitude: float64, latitude: float64, inclination: float64, nrho: int32
+    s: float, longitude: float, latitude: float, inclination: float, nrho: int
 ) -> np.ndarray:
     """
     Calculate the position of the spot, initialized at the disc center.
@@ -346,6 +387,7 @@ def spot_init(
     rho_step = 2.0 * pi / (nrho - 1)
 
     rho = np.arange(-pi, pi + rho_step, rho_step)
+    # rho = np.linspace(-pi, pi, nrho, endpoint=False) # check
 
     # x = sqrt(r^2-s^2), where r is the radius. r=1 therefore r^2=1
     # The active region is on the surface, so very close to x=1. However with
@@ -473,18 +515,24 @@ def spot_area(xyz, nrho, grid):
     counton = 0
     countoff = 0
     # scan each point the circumference
+    
     for j in range(nrho):
-        if xyz[j, 0] >= 0:  # if x >= 0
+        x = xyz[j, 0]
+        y = xyz[j, 1]
+        z = xyz[j, 2]
+
+        if x >= 0.0:
             counton += 1
-            #  select the extreme points of the circumference
-            if xyz[j, 1] < miny:
-                miny = xyz[j, 1]
-            if xyz[j, 2] < minz:
-                minz = xyz[j, 2]
-            if xyz[j, 1] > maxy:
-                maxy = xyz[j, 1]
-            if xyz[j, 2] > maxz:
-                maxz = xyz[j, 2]
+
+            if y < miny:
+                miny = y
+            if y > maxy:
+                maxy = y
+
+            if z < minz:
+                minz = z
+            if z > maxz:
+                maxz = z
         else:
             countoff = 1
 
@@ -827,12 +875,12 @@ def spot_scan_flux(
 
 @numba.njit(cache=True, nopython=True)
 def spot_scan_rv(
-    Ω,
+    v_eq,
     i,
     u1,
     u2,
-    αB,
-    αC,
+    alphaB,
+    alphaC,
     cb1,
     grid,
     rv,
@@ -970,9 +1018,9 @@ def spot_scan_rv(
                     if xyzi[0] ** 2 >= 1.0 - s**2:
                         ar_grid[iy, iz] = True
 
-                        delta_quiet = vrot(Ω, r_cos, y, z, αB, αC, i_rad, cb1)
+                        delta_quiet = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, cb1)
                         # We have inhibition of convective blueshift on the spot, as such cb1=0
-                        delta_spot = vrot(Ω, r_cos, y, z, αB, αC, i_rad, 0)
+                        delta_spot = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, 0)
                         if magn_feature_type == 0:
                             # intensity of the spot
                             T_spot = temperature_spot(Tstar, Tdiff)
@@ -998,12 +1046,12 @@ def spot_scan_rv(
 
 @numba.njit(cache=True, nopython=True)
 def spot_scan_spectrum(
-    Ω,
+    v_eq,
     i,
     u1,
     u2,
-    αB,
-    αC,
+    alphaB,
+    alphaC,
     cb1,
     grid,
     pixel,
@@ -1129,9 +1177,9 @@ def spot_scan_spectrum(
                     if xyzi[0] ** 2 >= 1.0 - s**2:
                         ar_grid[iy, iz] = True
 
-                        delta_quiet = vrot(Ω, r_cos, y, z, αB, αC, i_rad, cb1)
+                        delta_quiet = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, cb1)
                         # We have inhibition of convective blueshift on the spot, as such cb1=0
-                        delta_spot = vrot(Ω, r_cos, y, z, αB, αC, i_rad, 0)
+                        delta_spot = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, 0)
                         if magn_feature_type == 0:
                             # intensity of the spot
                             T_spot = temperature_spot(Tstar, Tdiff)
@@ -1618,8 +1666,8 @@ def planet_scan_rv(
     theta: float64,
     ir: float64,
     calc_rv: int,
-    αB: float64,
-    αC: float64,
+    alphaB: float64,
+    alphaC: float64,
     cb1: float64,
 ) -> np.ndarray:
     # Initialize parameters
@@ -1669,7 +1717,7 @@ def planet_scan_rv(
 
                 if calc_rv == 1:
                     latitude = z * sin(i) + r_cos * cos(i)
-                    delta = vrot(v, r_cos, y, z, αB, αC, i, cb1)
+                    delta = vrot(v, r_cos, y, z, alphaB, alphaC, i, cb1)
                     f_planet += linear_interpolator(rv, ccf, rv_vrot - delta) * limb
 
     # Set the final value
@@ -1702,8 +1750,8 @@ def planet_scan_spectrum(
     theta: float64,
     ir: float64,
     calc_rv: int,
-    αB: float64,
-    αC: float64,
+    alphaB: float64,
+    alphaC: float64,
     cb1: float64,
 ) -> np.ndarray:
     # Scan of the yz-area where the planet is.
@@ -1768,7 +1816,7 @@ def planet_scan_spectrum(
                 if calc_rv == 1:
 
                     latitude = z * sin(i) + r_cos * cos(i)
-                    delta = vrot(v, r_cos, y, z, αB, αC, i, cb1)
+                    delta = vrot(v, r_cos, y, z, alphaB, alphaC, i, cb1)
                     # Carefull!! Check the shift definition. This may be important for the spots also!
                     #shifted_quiet = doppler_shift(wave, flux, delta * 1e3)
                     shifted_quiet = doppler_shift(
@@ -1786,7 +1834,7 @@ def planet_scan_spectrum(
 #@numba.njit(cache=True)
 def planet_scan_ndate(v, i, date , ndate, limba1, limba2, 
                        grid, vrad_ccf,pixel,v_interval, n_v, n, Pp, t0,
-                       e,w , ip , a,lbda ,Rp, fe, fi, theta, ir, calc_rv, pixel_type, αB, αC,cb1): 
+                       e,w , ip , a,lbda ,Rp, fe, fi, theta, ir, calc_rv, pixel_type, alphaB, alphaC,cb1): 
     xyz2=np.zeros((ndate,3))
     flux_planet=np.zeros((ndate,n_v+1))
     ir=ir*pi/180.
@@ -1800,10 +1848,10 @@ def planet_scan_ndate(v, i, date , ndate, limba1, limba2,
         if out[0]==1:
             if pixel_type == 'ccf': 
                 flux_planet[idate]=planet_scan_rv(v, i, limba1, limba2, grid, vrad_ccf,pixel, 
-                        v_interval, n_v, n, out[1], out[2], out[3], out[4], xyz[1], xyz[2], Rp, fe, fi, theta, ir, calc_rv, αB, αC,cb1)
+                        v_interval, n_v, n, out[1], out[2], out[3], out[4], xyz[1], xyz[2], Rp, fe, fi, theta, ir, calc_rv, alphaB, alphaC,cb1)
             elif pixel_type == 'spectrum':
                 flux_planet[idate]=planet_scan_spectrum(v, i, limba1, limba2, grid, vrad_ccf,pixel, 
-                        v_interval, n_v, n, out[1], out[2], out[3], out[4], xyz[1], xyz[2], Rp, fe, fi, theta, ir, calc_rv, αB, αC, cb1)
+                        v_interval, n_v, n, out[1], out[2], out[3], out[4], xyz[1], xyz[2], Rp, fe, fi, theta, ir, calc_rv, alphaB, alphaC, cb1)
             else:
                 raise RuntimeError("Pixel type not supported. Choose between ccf and spectrum")
         else:
