@@ -1,5 +1,4 @@
 site_name: Spot Oscillation and Planet
-site_description: "High-fidelity analysis of stellar spots and planetary transits"
 site_author: "Eduardo Cristo"
 
 theme:
@@ -20,31 +19,25 @@ theme:
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
-  repo_url: https://github.com/EduardoCristo/SOAP-Spot-Oscillation-And-Planet-code
-  repo_name: GitHub "SOAP"
   features:
-    - navigation.expand: true
-    - navigation.top
-    - header.autohide        # Hide header on scroll for cleaner reading
-    - toc.integrate         # Integrate table of contents in page sidebar
-
-plugins:
-  - search
-  - mkdocstrings:
-      handlers:
-        python:
-          options:
-            group_by_category: true
-            members_order: alphabetical
-            show_source: false   # Hide source code links for clarity
-            show_root_toc_entry: false
-  - mkdocs-jupyter:
-      execute: false           # Automatically run notebooks at build time for up-to-date outputs
-      include_source: true
-      kernel_name: python3
-
-docs_dir: docs
-
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.path
+    - navigation.indexes 
+    - toc.integrate 
+    - content.code.copy
+    - content.code.select
+  
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
 nav:
   - Home: index.md
   - Install: install.md
@@ -53,6 +46,16 @@ nav:
       - Complex: notebooks/Sun_jupiter_phoenix.ipynb
   - API Reference: reference.md
 
+plugins:
+  - search
+  - mkdocs-jupyter
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [SOAP]
+          options:
+            filters:
+              - "!^_"
 extra:
   social:
     - icon: fontawesome/brands/github
