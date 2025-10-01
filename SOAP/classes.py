@@ -641,32 +641,28 @@ spectrum2d_attr_spec = [
     ("wave", float64[:]),
     ("flux2d", float64[:, :]),
     ("n", int32),
-    # ('interp', RegularGridInterpolator),
+    ("μ", float64[:])
 ]
 
 
 @jitclass(spectrum2d_attr_spec)
 class SpectrumNumbaInterpolated:
-    def __init__(self, wave, flux2d):
+    def __init__(self, wave, flux2d, μ):
         self.n = wave.size
         self.wave = wave
         self.flux2d = flux2d
-
-    # def interpolate(self):
-    #     with objmode():
-    #     return interp
-
+        self.μ = μ
     def flux(self, mu=0.0):
         # don't do extrapolations, use the μ=0.2 spectrum
-        if mu < 0.2:
+        if mu < np.min(self.μ):
             return self.flux2d[:, 0]
+        # Experimental, check this
+        elif mu > np.max(self.μ):
+            return self.flux2d[:, -1]
         # do interpolation
-        μ = np.array(
-            [0.2, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.97, 0.98, 0.99, 1.0]
-        )
         xi = np.column_stack((np.full(self.wave.size, mu), self.wave))
         with objmode(y="float64[:]"):
-            interp = RegularGridInterpolator((μ, self.wave), self.flux2d.T)
+            interp = RegularGridInterpolator((self.μ, self.wave), self.flux2d.T)
             y = interp(xi)
         return y
 
@@ -919,9 +915,35 @@ class Spec_mu(Spectrum):
 
     def to_numba(self):
         return SpectrumNumbaInterpolated(
-            self.wave.astype(float), self.flux.astype(float)
+            self.wave.astype(float), self.flux.astype(float),self.μ.astype(float)
         )
 
+class Spec_Grass(Spectrum):
+    def __init__(self,
+                 mu_array,
+                 wavelength,
+                 spectra,
+                 air_wave=True
+                 ):
+        self.μ = mu_array
+        self.spectra=spectra
+        self.flux=self.spectra[0].T
+        wave=wavelength
+        self.wave=wave
+        flux=self.spectra[0].T
+
+        self.wave_range =[np.min(wavelength),np.max(wavelength)]
+
+
+        super().__init__(wave, flux)
+    
+    def to_numba(self):
+        np.random.shuffle(self.spectra)
+        flux=self.spectra[0].T
+        return SpectrumNumbaInterpolated(
+            self.wave.astype(float), self.flux.astype(float),self.μ.astype(float)
+        )
+    
 class solarIAGatlas(Spectrum):
     def __init__(self, wave_range=(4198, 7998), air_wave=True):
         here = os.path.dirname(__file__)
@@ -982,7 +1004,7 @@ class solarIAGatlas(Spectrum):
 
     def to_numba(self):
         return SpectrumNumbaInterpolated(
-            self.wave.astype(float), self.flux.astype(float)
+            self.wave.astype(float), self.flux.astype(float),self.μ.astype(float)
         )
 
 

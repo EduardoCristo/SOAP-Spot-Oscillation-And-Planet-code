@@ -294,6 +294,42 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#some-of-the-use-cases-of-soap" class="md-nav__link">
+    <span class="md-ellipsis">
+      Some of the use cases of SOAP
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#development-of-soap-through-time" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development of SOAP through Time
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#getting-started" class="md-nav__link">
+    <span class="md-ellipsis">
+      Getting Started
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#soap-history" class="md-nav__link">
+    <span class="md-ellipsis">
+      SOAP History
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -334,20 +370,15 @@
     
     
     
-      
-        
-        
-      
     
-    
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
         <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
             
   
   
@@ -402,7 +433,7 @@
   
   
   <span class="md-ellipsis">
-    Transmission spectrum of a transit event
+    Sun–Jupiter Transit Spectra Simulation
     
   </span>
   
@@ -460,35 +491,46 @@
 
 <h1 id="welcome-to-soaps-documentation">Welcome to SOAP's Documentation!</h1>
 <h2 id="introduction">Introduction</h2>
-<p>SOAPv4 ("Spot Oscillation And Planet") is a open-source Python package designed to model the impact of stellar activity and planetary transits on high-resolution spectroscopic and photometric observatiosn. In the era of high-resolution spectroscopy, understanding how stellar features like spots, faculae, and granulation influence observables is crucial for the accurate characterization of both exoplanets and their atmospheres.</p>
-<p>Initially conceived to simulate the radial velocity (RV) effects of stellar spots, SOAP has expanded over several versions to incorporate a range of physical phenomena and observational configurations. With SOAPv4, the tool now enables direct simulation of both cross-correlation functions (CCFs) and full stellar spectra, capturing the complexities of active regions, differential rotation, convective blueshift, and planet-induced line profile distortions.</p>
-<p>When to Use SOAPv4</p>
-<p>SOAPv4 is essential for researchers aiming to:</p>
-<pre><code>Assess stellar contamination in exoplanet transit spectra and RV data
-
-Interpret or validate observed absorption features in the presence of stellar variability
-
-Model the signal of transiting planets for a range of stellar/planetary system parameters
-
-Simulate high-resolution spectroscopic time series, including chromatic and Doppler-shadow diagnostics
-</code></pre>
-<p>Whether the goal is to study the impact of active regions on atmospheric characterization, quantify the granulation noise for planet detection, or benchmark models against solar data, SOAPv4 provides a robust and flexible numerical framework to address these challenges.</p>
-<p>Getting Started</p>
-<p>SOAPv4 is publicly available on GitHub:
-https://github.com/EduardoCristo/SOAP-Spot-Oscillation-And-Planet-code</p>
-<p>For detailed installation and usage instructions, proceed to the <a href="install/">Install</a></p>
-<h1 id="welcome-to-soaps-documentation_1">Welcome to SOAP's Documentation!</h1>
-<p><strong>SOAP</strong> (Spot Oscillation and Planet) estimates the effects of active regions, spots, or plages on radial-velocity (RV) and photometric observations.</p>
-<p>The code calculates the RV, bisector span, and full width at half maximum (FWHM), defined with the cross-correlation technique and optimized to reproduce HARPS (HARPS-N) observations. The photometric variations induced by active regions (flux at 5293 Angstrom) can also be calculated.</p>
+<p><strong>SOAPv4</strong> (<em>Spot Oscillation And Planet</em>) is an open-source Python package designed to model the impact of stellar activity and planetary transits on high-resolution spectroscopic, radial velocity and photometric observations.  </p>
+<p>In the era of high-resolution spectroscopy, understanding how stellar features - such as spots and facula observables is essential for the accurate characterization of exoplanets and their atmospheres.</p>
+<p>Initially developed to simulate the radial velocity effects of stellar spots, SOAP has evolved over several versions to incorporate a wide range of physical phenomena and observing configurations. With SOAPv4, users can directly simulate both cross-correlation functions and full stellar spectra, modeling the impact of active regions, differential rotation, convective blueshift, and planet-induced line profile distortions.</p>
+<hr />
+<h2 id="some-of-the-use-cases-of-soap">Some of the use cases of SOAP</h2>
+<p>SOAPv4 is especially suited for researchers who want to:
+- Compute time series of integrated stellar spectra
+- Assess stellar contamination in exoplanet transit spectra
+- Comput the photometric and radial velocity modulation of stellar activity
+- Model the signal of transiting planets for a wide range of stellar/planetary system parameters<br />
+- Model transmission spectra (POLDs) and Doppler shadow in a simple way</p>
+<hr />
+<h2 id="development-of-soap-through-time">Development of SOAP through Time</h2>
+<p>The <strong>SOAP code</strong> (<a href="https://ui.adsabs.harvard.edu/#abs/2012A%26A...545A.109B"><em>Boisse et al. 2012</em></a>) was originally developed to model the impact of stellar activity, particularly starspots, on radial velocity (RV) time series. In its first implementation, SOAP approximated the local stellar disk spectrum using cross-correlation functions (CCFs), represented as Gaussian profiles with user-defined parameters. For each stellar surface element, the corresponding CCF was Doppler-shifted according to local rotational velocities under the assumption of solid-body rotation, and flux-weighted according to a limb-darkening law.  </p>
+<p>Active regions (ARs) were introduced as circular areas, initially placed at the stellar disk center and then mapped to the appropriate latitude and longitude using spherical symmetry. The same Gaussian profile was applied to the ARs’ CCFs, with their contribution scaled by a contrast parameter: values between 0 and 1 for dark spots, and values above 1 for bright faculae. Although simplistic, this framework introduced a first-order tool for quantifying the distortions introduced by stellar activity into RV measurements.  </p>
+<p>Building on this foundation, several successive versions expanded SOAP’s scope:  </p>
+<ul>
+<li>
+<p><strong>SOAP-T</strong> (<a href="https://ui.adsabs.harvard.edu/abs/2013A&amp;A...556A..19O"><em>Oshagh et al. 2013</em></a>) incorporated transiting exoplanets. The code simulates the occultation of quiet-star (QS) pixels by subtracting their contribution during the transit, enabling simultaneous modeling of photometric light curves, Keplerian motion, and the <em>Rossiter–McLaughlin effect</em> (Holt 1893; Rossiter 1924; McLaughlin 1924). This made SOAP-T a practical tool for probing spin–orbit alignments in planetary systems.  </p>
+</li>
+<li>
+<p><strong>SOAP 2.0</strong> (<a href="https://ui.adsabs.harvard.edu/abs/2014ApJ...796..132D"><em>Dumusque et al. 2014</em></a>) improved the physical realism of the stellar activity modeling by grounding simulations in <em>solar observations</em>. High-resolution data from the Kitt Peak Fourier Transform Spectrograph (FTS), including spectra of quiet-sun (QS) regions (<em>Wallace et al. 1998</em>) and sunspot umbrae (<em>Wallace et al. 2005</em>), were incorporated. This allowed more realistic modeling of stellar line-profile deformations, particularly the effects of <em>convective blueshift</em> and its inhibition inside ARs. SOAP 2.0 also introduced facular limb brightening and spot/faculae contrasts determined via the Planck function across temperature differences. Despite these refinements, it still remained limited to synthetic CCFs rather than full spectra.  </p>
+</li>
+</ul>
+<p>Although not fully released to the public, intermediate versions significantly shaped later developments:  </p>
+<ul>
+<li><a href="https://ui.adsabs.harvard.edu/abs/2016A%26A...593A..25O"><strong>Oshagh et al. (2016)</strong></a> integrated upgrades from SOAP-T and SOAP 2.0 to investigate how stellar activity biases measurements of planetary spin–orbit misalignments.  </li>
+<li><a href="https://ui.adsabs.harvard.edu/abs/2018A%26A...609A..21A/abstract"><strong>Akinsanmi et al. (2018)</strong></a> implemented extensions to simulate ringed planets and stellar rotational deformation, capturing their signatures in both photometric light curves and RVs during the Rossiter–McLaughlin effect.  </li>
+<li><a href="https://ui.adsabs.harvard.edu/abs/2020MNRAS.493.5928S/abstract"><strong>Serrano et al. (2020)</strong></a> and <strong>Cristo et al. (2024)</strong> added differential rotation (e.g., <em>Balona &amp; Abedigamba 2016</em>) and activity-related convective blueshift signals during planetary transits (<em>Shporer &amp; Brown 2011</em>). These additions pushed SOAP toward modeling stellar activity at a higher level of physical detail.  </li>
+</ul>
+<p>A parallel branch was developed in the form of <strong>SOAP-GPU</strong> (<a href="https://ui.adsabs.harvard.edu/abs/2023A%26A...671A..11Z"><em>Zhao &amp; Dumusque 2023</em></a>), a fork of SOAP 2.0 aimed at simulating stellar spectra instead of CCFs. SOAP-GPU introduced direct mapping of ARs, more sophisticated treatments of convective blueshift across the stellar disk based on empirical solar measurements (<em>Löhner-Böttcher et al. 2019</em>), and GPU optimization for improved computational efficiency. Nevertheless, its reliance on GPU architectures reduced accessibility for many users, and it did not support planetary transits.  </p>
+<p>These various implementations ultimately converged in <strong>SOAPv4</strong>, the latest version of the code. By integrating the advances of all previous versions and extending beyond CCF-only output, SOAPv4 now produces <em>time-resolved stellar spectra as well as CCFs</em>. This marks a critical step in evolving SOAP from a specialized RV simulator into a comprehensive framework for modeling spectra, transit signals, stellar variability, and their interplay in exoplanetary science.  </p>
+<h2 id="getting-started">Getting Started</h2>
+<p>SOAPv4 is publicly available on GitHub:<br />
+<a href="https://github.com/EduardoCristo/SOAP-Spot-Oscillation-And-Planet-code">https://github.com/EduardoCristo/SOAP-Spot-Oscillation-And-Planet-code</a></p>
+<p>For detailed installation and usage instructions, see the <a href="install/">Install Guide</a>.</p>
 <hr />
 <h2 id="soap-history">SOAP History</h2>
 <p><img alt="SOAP Timeline" src="assets/timeline.png" /></p>
 <hr />
-<h2 id="contents">Contents</h2>
-<ul>
-<li><a href="install/">Install</a></li>
-<li><a href="quickstart.md">Quickstart</a></li>
-</ul>
 
 
 
@@ -559,7 +601,7 @@ https://github.com/EduardoCristo/SOAP-Spot-Oscillation-And-Planet-code</p>
     
     
       
-      <script id="__config" type="application/json">{"base": ".", "features": ["navigation.sections", {"navigation.expand": true}, "navigation.top", "header.autohide", "toc.integrate"], "search": "assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"base": ".", "features": [{"navigation.expand": true}, "navigation.top", "header.autohide", "toc.integrate"], "search": "assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="assets/javascripts/bundle.92b07e13.min.js"></script>

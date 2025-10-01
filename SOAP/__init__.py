@@ -9,6 +9,7 @@ from .classes import (
     CCF,
     PHOENIX,
     Spec_mu,
+    Spec_Grass,
     ActiveRegion,
     Planet,
     Ring,
@@ -30,5 +31,5 @@ if __name__ == "__main__":
         if multiprocessing.get_start_method(allow_none=True) != "spawn":
             multiprocessing.set_start_method("spawn")
 
-__all__ = ["Simulation", "ActiveRegion", "CCF", "Star","Planet", "Ring", "Spec_mu", "PHOENIX",
+__all__ = ["Simulation", "ActiveRegion", "CCF", "Star","Planet", "Ring", "Spec_mu","Spec_Grass","PHOENIX",
            "gaussianCCF", "solarCCF", "solarFTS", "solarIAGatlas"]

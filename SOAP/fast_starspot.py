@@ -87,7 +87,7 @@ def doppler_shift_wave(wave: np.ndarray, rv: float):
     wave : np.ndarray
         Wavelength array in Angstroms.
     rv : float
-        Radial velocity in km/s.
+        Radial velocity in m/s.
     Returns
     -------
     np.ndarray
@@ -107,7 +107,7 @@ def doppler_shift(wave: np.ndarray, flux: np.ndarray, rv: float):
     flux : np.ndarray
         Spectrum flux array.
     rv : float
-        Radial velocity in km/s.
+        Radial velocity in m/s.
     Returns
     -------
     np.ndarray

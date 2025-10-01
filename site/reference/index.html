@@ -283,20 +283,15 @@
     
     
     
-      
-        
-        
-      
     
-    
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
         <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
             
   
   
@@ -351,7 +346,7 @@
   
   
   <span class="md-ellipsis">
-    Transmission spectrum of a transit event
+    Sun–Jupiter Transit Spectra Simulation
     
   </span>
   
@@ -493,9 +488,18 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#SOAP.CCF.__init__--arguments" class="md-nav__link">
+  <a href="#SOAP.CCF.__init__--parameters" class="md-nav__link">
     <span class="md-ellipsis">
-      Arguments
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#SOAP.CCF.__init__--attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Attributes
     </span>
   </a>
   
@@ -503,6 +507,69 @@
         
       </ul>
     </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#SOAP.Planet" class="md-nav__link">
+    <span class="md-ellipsis">
+      Planet
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Planet">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#SOAP.Planet.add_ring" class="md-nav__link">
+    <span class="md-ellipsis">
+      add_ring
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="add_ring">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#SOAP.Planet.add_ring--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#SOAP.Ring" class="md-nav__link">
+    <span class="md-ellipsis">
+      Ring
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Ring">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#SOAP.Ring--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
   
 </li>
         
@@ -591,20 +658,74 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#SOAP.Star--parameters" class="md-nav__link">
-    <span class="md-ellipsis">
-      Parameters
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#SOAP.Star.vrot" class="md-nav__link">
     <span class="md-ellipsis">
       vrot
     </span>
   </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#SOAP.gaussianCCF" class="md-nav__link">
+    <span class="md-ellipsis">
+      gaussianCCF
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="gaussianCCF">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#SOAP.gaussianCCF.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      __init__
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#SOAP.solarCCF" class="md-nav__link">
+    <span class="md-ellipsis">
+      solarCCF
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="solarCCF">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#SOAP.solarCCF.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      __init__
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="__init__">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#SOAP.solarCCF.__init__--arguments" class="md-nav__link">
+    <span class="md-ellipsis">
+      Arguments
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
         
@@ -951,7 +1072,7 @@ size_area_visible_hemisphere (float): Size of the active region in area of the v
     <div class="doc doc-contents ">
 
         <p>Total number of RV bins in the CCF after considering a stellar rotation
-velocity equal to self.vrot.</p>
+velocity equal to vrot</p>
 
     </div>
 
@@ -994,20 +1115,327 @@ velocity equal to self.vrot.</p>
 
     <div class="doc doc-contents ">
 
-        <h5 id="SOAP.CCF.__init__--arguments">Arguments</h5>
-<p>rv : array
-    RV array where the CCF is defined [km/s or astropy unit]
-intensity : array
-    CCF array
-normalize : bool
-    Whether to normalize the CCF by its median
-convolved : bool
-    Whether the CCF is already convolved with the instrumental profile</p>
+        <p>Initialize the CCF object.</p>
+<h5 id="SOAP.CCF.__init__--parameters">Parameters</h5>
+<p>rv : array-like
+    Radial velocity array where the CCF is defined [km/s or astropy unit].
+intensity : array-like
+    CCF intensity array.
+normalize : bool, optional
+    If True, normalize the CCF by its median. Default is True.
+convolved : bool, optional
+    If True, indicates that the CCF is already convolved with the instrumental profile. Default is False.</p>
+<h5 id="SOAP.CCF.__init__--attributes">Attributes</h5>
+<p>rv : array-like
+    Radial velocity array.
+intensity : array-like
+    Normalized or raw CCF intensity array.
+    Indicates if the CCF is convolved.
+n : int
+    Number of points in the CCF.
+step : float
+    Step size between consecutive RV points.
+width : float
+    Maximum absolute value of RV, representing the CCF width.
+_rv_units : astropy.units.Unit
+    Units of the RV array.
+_vrot : astropy.units.Quantity
+    Rotational velocity, initialized to zero.</p>
 
 
     </div>
 
 </div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="SOAP.Planet" class="doc doc-heading">
+            <code>Planet</code>
+
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+
+        <p>A planet (which may have rings)</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>P</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Orbital period [day]</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>a</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Semi-major axis [stellar radius]</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>Rp</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Planet radius [stellar radius]</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>Mp</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Planet mass [Earth mass]</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>e</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Eccentricity of the orbit. Default is 0</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>w</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Argument of periastron [degree]. w=0 means periastron is on the yz
+plane, w=90 means it is in front of the observer. Default is 90</p>
+              </div>
+            </td>
+            <td>
+                  <code>90.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>ip</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Inclination of the orbital plane [degree]. Default is 90</p>
+              </div>
+            </td>
+            <td>
+                  <code>90.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>lbda</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Projected spin-orbit misalignment angle [degree]. Default is 0</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>t0</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Time of periastron passage [day]. Default is 0</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.0</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="SOAP.Planet.add_ring" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">add_ring</span><span class="p">(</span><span class="n">fi</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">fe</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">ir</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">theta</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Add a ring to this planet.</p>
+<h5 id="SOAP.Planet.add_ring--parameters">Parameters</h5>
+<p>fi : float, optional [default: 1.0]
+    Ring inner radius
+fe : float, optional [default: 1.0]
+    Ring outer radius
+ir : float, optional [default: 0.0]
+    Projected inclination of ring wrt to the skyplane [degrees].
+    90 for an edge-on ring, 0 for face on
+theta : float, optional [default: 0.0]
+    Projected ring tilt [degrees]. 90 means that the image of the ring in
+    perpendicular to the orbit in the plane of the sky.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="SOAP.Ring" class="doc doc-heading">
+            <code>Ring</code>
+
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+
+        <p>Ring of the planet</p>
+<h4 id="SOAP.Ring--parameters">Parameters</h4>
+<p>fi : float
+    Ring inner radius (must be &gt;= 1)
+fe : float
+    Ring outer radius (must be &gt;= 1 and &gt;= fi)
+ir : float
+    Projected inclination of ring wrt to the skyplane [degrees].
+    90 for an edge-on ring, 0 for face on
+theta : float
+    Projected ring tilt [degrees]. 90 means that the image of the ring in
+    perpendicular to the orbit in the plane of the sky.</p>
+
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1705,11 +2133,6 @@ distributed in the stellar surface</p>
     </table>
 
 
-<p><span class="doc-section-title">Examples:</span></p>
-    <p>sim.set_pixel( SOAP.gaussianCCF() )
-sim.set_pixel( SOAP.solarCCF(sim.star.vrot) ) # this is the default</p>
-
-
     </div>
 
 </div>
@@ -1736,30 +2159,199 @@ sim.set_pixel( SOAP.solarCCF(sim.star.vrot) ) # this is the default</p>
     <div class="doc doc-contents ">
 
 
-        <p>This object holds information about the star</p>
-<h4 id="SOAP.Star--parameters">Parameters</h4>
-<p>prot : float
-    Stellar rotation period [days]. If differential rotation is on, this is
-    the rotation period at the equator.
-incl : float
-    Inclination of the rotational axis [degrees]
-diffrotB, diffrotC : float
-    Coefficients for the latitudinal differential rotation
-        w(lat) = w_eq - diffrotB * sin^2(lat) - diffrotC * sin^4(lat)
-    (NOTE the minus signs!)
-cb1: float
-    Absolute value of the convective blueshift (m/s)
-    V_CB=cb1<em>r</em>cos(theta)
-u1, u2 : float
-    Linear and quadratic coefficients of the quadratic limb-darkening law
-radius : float
-    Stellar radius [Rsun]
-mass : float
-    Stellar mass [Msun]
-teff : float
-    Effective temperature of the star [K]
-start_psi : float
-    Starting phase [in units of rotation period]</p>
+        <p>A star object holding stellar parameters.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>prot</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Stellar rotation period [days]. If differential rotation is on, this is
+the rotation period at the equator.</p>
+              </div>
+            </td>
+            <td>
+                  <code>25</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>incl</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Inclination of the rotational axis [degrees].</p>
+              </div>
+            </td>
+            <td>
+                  <code>90</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>diffrotB</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Coefficient for latitudinal differential rotation (sin^2 term).</p>
+              </div>
+            </td>
+            <td>
+                  <code>0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>diffrotC</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Coefficient for latitudinal differential rotation (sin^4 term).</p>
+              </div>
+            </td>
+            <td>
+                  <code>0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>cb1</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Absolute value of the convective blueshift (m/s).</p>
+              </div>
+            </td>
+            <td>
+                  <code>0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>u1</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Linear coefficient of the quadratic limb-darkening law.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.29</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>u2</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Quadratic coefficient of the quadratic limb-darkening law.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.34</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>radius</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Stellar radius [R_sun].</p>
+              </div>
+            </td>
+            <td>
+                  <code>1</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>mass</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Stellar mass [M_sun].</p>
+              </div>
+            </td>
+            <td>
+                  <code>1</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>teff</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Effective temperature of the star [K].</p>
+              </div>
+            </td>
+            <td>
+                  <code>5778</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>start_psi</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Starting phase [in units of rotation period].</p>
+              </div>
+            </td>
+            <td>
+                  <code>0</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -1803,6 +2395,251 @@ start_psi : float
 
 
 
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="SOAP.gaussianCCF" class="doc doc-heading">
+            <code>gaussianCCF</code>
+
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="CCF (SOAP.classes.CCF)" href="#SOAP.CCF">CCF</a></code></p>
+
+
+        <p>A Gaussian CCF defined by a depth [0-1] and a FWHM in km/s</p>
+
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="SOAP.gaussianCCF.__init__" class="doc doc-heading">
+            <code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">depth</span><span class="o">=</span><span class="mf">0.56</span><span class="p">,</span> <span class="n">fwhm</span><span class="o">=</span><span class="mf">2.5</span><span class="p">,</span> <span class="n">RV</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">window</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">convolved</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>depth</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Amplitude of the CCF, between 0 and 1</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.56</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>fwhm</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Full width at half maximum of the CCF [km/s]</p>
+              </div>
+            </td>
+            <td>
+                  <code>2.5</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>RV</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Radial velocity where the CCF is centered [km/s]</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>window</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The CCF is defined between -window and +window [km/s]</p>
+              </div>
+            </td>
+            <td>
+                  <code>20</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>step</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Radial velocity step of the CCF [km/s]</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.1</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>convolved</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether the CCF is already convolved with the instrumental
+profile.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="SOAP.solarCCF" class="doc doc-heading">
+            <code>solarCCF</code>
+
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="CCF (SOAP.classes.CCF)" href="#SOAP.CCF">CCF</a></code></p>
+
+
+        <p>Solar CCF obtained with the FTS spectrograph</p>
+
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="SOAP.solarCCF.__init__" class="doc doc-heading">
+            <code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">vrot</span><span class="p">,</span> <span class="n">active_region</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <h5 id="SOAP.solarCCF.__init__--arguments">Arguments</h5>
+<p>vrot : float
+    Rotation velocity of the star (used to select a wider CCF window)
+active_region : bool, default False
+    Get the CCF for the active region instead of the quiet Sun</p>
+
+
+    </div>
+
+</div>
 
 
 
@@ -1890,7 +2727,7 @@ start_psi : float
     
     
       
-      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.sections", {"navigation.expand": true}, "navigation.top", "header.autohide", "toc.integrate"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"base": "..", "features": [{"navigation.expand": true}, "navigation.top", "header.autohide", "toc.integrate"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../assets/javascripts/bundle.92b07e13.min.js"></script>
