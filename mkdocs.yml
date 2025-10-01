@@ -1,5 +1,6 @@
 site_name: Spot Oscillation and Planet
 site_author: "Eduardo Cristo"
+site_url: https://EduardoCristo.github.io/SOAP-Spot-Oscillation-And-Planet-code/
 
 theme:
   name: material
@@ -40,10 +41,13 @@ markdown_extensions:
       alternate_style: true
 nav:
   - Home: index.md
+
   - Install: install.md
+
   - Examples:
       - Basic Example: notebooks/compare_batman.ipynb
       - Complex: notebooks/Sun_jupiter_phoenix.ipynb
+  
   - API Reference: reference.md
 
 plugins:
