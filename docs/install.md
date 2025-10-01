@@ -1,17 +1,14 @@
-### INSTALLATION
-
 SOAP is written Python.
-To install run the following commands
+To install run the following commands:
 
 ```bash
-git clone https://github.com/EduardoCristo/SOAP-Spot-Oscillation-And-Planet-code SOAP
-cd SOAP
+git clone https://github.com/EduardoCristo/SOAP-Spot-Oscillation-And-Planet-code
 
 pip install -e .
 ```
 
-then you can use SOAP from Python with 
+Then you can use SOAP from Python with:
 
-```
->>> import SOAP
+```bash
+import SOAP
 ```
