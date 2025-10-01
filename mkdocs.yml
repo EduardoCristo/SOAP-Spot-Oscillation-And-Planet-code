@@ -1,6 +1,7 @@
 site_name: Spot Oscillation and Planet
 site_author: "Eduardo Cristo"
 docs_dir: docs
+repo_url: https://github.com/EduardoCristo/SOAP-Spot-Oscillation-And-Planet-code
 
 theme:
   name: material
