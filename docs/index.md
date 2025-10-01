@@ -6,7 +6,7 @@
 
 Initially built to reproduce the radial velocity effects of stellar spots, SOAP has broadened its scope across multiple versions. **SOAPv4** now integrates a wide set of physical processes and observational configurations.
 
-### Novelty of SOAPv4
+### Novelty of **SOAPv4**
 - Extends beyond cross-correlation functions (CCFs) by providing **time-resolved stellar spectra**.
 - Incorporates **complex stellar activity effects**: active regions, differential rotation, convective blueshift, and additonal sources of center-to-limb variations;
 - Unifies past developments into a **comprehensive modeling framework**;

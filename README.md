@@ -1,19 +1,15 @@
-![SOAP](https://github.com/iastro-pt/SOAPprivate/workflows/SOAP/badge.svg?branch=main)
+![SOAP](https://eduardocristo.github.io/SOAP-Spot-Oscillation-And-Planet-code/)
 
-[![read SOAP](https://img.shields.io/badge/paper-SOAP-7d93c7.svg?style=flat)](https://arxiv.org/abs/1206.5493)
+[![read SOAP](https://img.shields.io/badge/paper-SOAP-7d93c7.svg?style=flat)](https://ui.adsabs.harvard.edu/#abs/2012A%26A...545A.109B)
 [![read SOAPT](https://img.shields.io/badge/paper-SOAP_T-7d93c7.svg?style=flat)](https://arxiv.org/abs/1211.1311)
 [![read SOAP2](https://img.shields.io/badge/paper-SOAP_2-7d93c7.svg?style=flat)](https://arxiv.org/abs/1409.3594)
 [![read SOAP3 rings](https://img.shields.io/badge/paper-SOAP_3%20rings-7d93c7.svg?style=flat)](https://arxiv.org/abs/1709.06443)
 [![read SOAP3 DR](https://img.shields.io/badge/paper-SOAP_3%20DR-7d93c7.svg?style=flat)](https://arxiv.org/abs/2002.08227)
 
 
-SOAP estimates the effects of active regions (spots or plages), planets, and
-rings on radial-velocity (RV) and photometric measurements. The code calculates
-the photometric variations induced by active regions (flux at 5293 Angstrom) as
-well as the RV, bisector span (BIS), and full width at half maximum (FWHM) as
-defined with the cross-correlation technique and optimized to reproduce HARPS
-observations.
+**SOAPv4** (*Spot Oscillation And Planet*) is an open-source Python package that simulates the impact of stellar activity and planetary transits on spectroscopic, radial velocity, and photometric data. Accurate modeling of stellar features like spots and faculae is essential for robust exoplanet characterization, particularly with high-resolution spectroscopy.
 
+Initially built to reproduce the radial velocity effects of stellar spots, SOAP has broadened its scope across multiple versions. **SOAPv4** now integrates a wide set of physical processes and observational configurations.
 
 ### INSTALLATION
 
