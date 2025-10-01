@@ -31,4 +31,5 @@ jobs:
             mkdocs-material-
       
       - run: pip install mkdocs mkdocs-material mkdocstrings-python mkdocs-jupyter
+      - run: mkdocs build --clean
       - run: mkdocs gh-deploy --force
