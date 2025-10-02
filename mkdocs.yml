@@ -46,8 +46,7 @@ nav:
   - Install: install.md
 
   - Examples:
-      - Basic Example: notebooks/compare_batman.ipynb
-      - Complex: notebooks/Sun_jupiter_phoenix.ipynb
+      - Transit time-series: notebooks/Transit_time_series.ipynb
   
   - API Reference: reference.md
 
