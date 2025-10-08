@@ -492,12 +492,11 @@ def animate_visualization(
     cb1 = fig.colorbar(im_star, ax=axs[0], orientation="vertical", fraction=0.05, pad=0.04)
     cb1.set_label(color_label, rotation=270, labelpad=16)
 
-    cb2 = fig.colorbar(sm, ax=axs[1], orientation="vertical", fraction=0.05, pad=0.04)
     if sim.has_planet:
+        cb2 = fig.colorbar(sm, ax=axs[1], orientation="vertical", fraction=0.05, pad=0.04)
         cb2.set_label("Orbital Phase", rotation=270, labelpad=16)
     else:
-        cb2.set_label("Rotational Phase", rotation=270, labelpad=16)
-
+        None
 
     # Slightly tighter global pads to better use the canvas while avoiding overlap
     fig.set_constrained_layout_pads(w_pad=0.02, h_pad=0.02, hspace=0.02, wspace=0.02)  # scaled pads with constrained layout.
@@ -552,8 +551,8 @@ def animate_visualization(
                     artists_right[1].set_data([psi_i[idx]], [points_to_plot[idx]])
                     artists_right[1].set_color(cmap(norm(psi_i[~phase_mask][frame])))
 
-
-        cb2.update_normal(sm)
+        if sim.has_planet:
+            cb2.update_normal(sm)
         return all_artists
 
     if sim.has_planet:
