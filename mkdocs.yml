@@ -1,0 +1,73 @@
+site_name: Spot Oscillation and Planet
+site_author: "Eduardo Cristo"
+docs_dir: docs
+repo_url: https://github.com/EduardoCristo/SOAP-Spot-Oscillation-And-Planet-code
+
+theme:
+  name: material
+  font:
+    text: Roboto
+    code: Roboto Mono
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.path
+    - navigation.indexes 
+    - toc.integrate 
+    - content.code.copy
+    - content.code.select
+  
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+nav:
+  - Home: index.md
+
+  - Install: install.md
+
+  - Examples:
+      - Stellar Activity Time-Series: notebooks/RV_phot_activity.ipynb
+      - Transit & Absorption Time-Series: notebooks/Transit_time_series.ipynb
+      - Spot-Crossing Transit & Absorption Time-Series: notebooks/Transit_time_spot_crossing.ipynb
+      - Transit time-series (RV + phot): notebooks/RV_phot_transit.ipynb
+      - Transit time-series AR crossing (RV + phot): notebooks/RV_phot_AR_crossing.ipynb
+
+
+  - API Reference: reference.md
+
+plugins:
+  - search
+  - mkdocs-jupyter
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [SOAP]
+          options:
+            filters:
+              - "!^_"
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/EduardoCristo/SOAP-Spot-Oscillation-And-Planet-code
+  footer:
+    copyright: "© 2025 Eduardo Cristo"

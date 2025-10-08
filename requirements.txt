@@ -1,0 +1,14 @@
+numpy
+scipy
+matplotlib
+astropy
+numba
+iCCF
+joblib
+pandas
+expecto
+airvacuumvald
+better_uniform
+intervaltree
+requests
+ldtk
