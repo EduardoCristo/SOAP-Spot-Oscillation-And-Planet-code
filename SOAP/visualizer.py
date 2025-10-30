@@ -296,7 +296,7 @@ def visualize(sim, out, plot_type, lim, ref_wave, plot_lims, show_data):
                                     j.size, (j.lon).value, (j.lat).value, (sim.star.incl).value, 40
                                 )
                                 spot_phase_position = spot_phase(
-                                    spot, (sim.star.incl).value, out.psi[i] - out.psi[0]
+                                    spot, (sim.star.incl).value, out.psi[i]
                                 )
                                 polygon = Polygon(
                                     np.array([spot_phase_position[:, 1], spot_phase_position[:, 2]]).T,

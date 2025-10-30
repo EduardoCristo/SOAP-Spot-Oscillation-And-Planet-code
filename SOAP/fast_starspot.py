@@ -247,6 +247,243 @@ def itot_spectrum_par(
     total_spectrum = np.sum(thread_spectra, axis=0)
     return total_spectrum
 
+@numba.njit
+def random_pick(n):
+    # Returns a random integer between 0 and n-1
+    return np.random.randint(0, n)
+
+@numba.njit(parallel=True, cache=True)
+def itot_spectrum_par_np(
+    v_eq: float64,
+    i: float64,
+    u1: float64,
+    u2: float64,
+    alphaB: float64,
+    alphaC: float64,
+    cb1: float64,
+    grid: int32,
+    spec,
+) -> np.ndarray:
+    """
+    Calculate the spectrum in each cell of the grid and integrate over the entire
+    stellar disc.
+    This function uses parallel processing to speed up the calculation.
+    Arguments
+    ---------
+    v_eq : float64
+        Equatorial linear velocity in km/s.
+    i : float64
+        Inclination angle in degrees.
+    u1 : float64
+        Quadratic limb-darkening coefficient.
+    u2 : float64
+        Quadratic limb-darkening coefficient.
+    alphaB : float64
+        Relative coefficient for sin²(latitude) term.
+    alphaC : float64
+        Relative coefficient for sin⁴(latitude) term.
+    cb1 : float64
+        Additional constant velocity term (e.g. convective blueshift) in m/s.
+    grid : int32
+        Grid size (number of cells along one dimension).
+    spec : Spectrum
+        Spectrum object containing wavelength and flux data.
+    Returns
+    -------
+    np.ndarray
+        Integrated spectrum over the entire stellar disc.
+    """
+    i = i * np.pi / 180.0  # Convert degrees to radians
+    delta_grid = 2.0 / grid
+    wave_size = len(spec[0].wave)
+    y_positions = np.linspace(-1.0 + delta_grid / 2.0, 1.0 - delta_grid / 2.0, grid)
+    z_positions = np.linspace(-1.0 + delta_grid / 2.0, 1.0 - delta_grid / 2.0, grid)
+    numb_prof=len(spec)
+    # Each thread writes to its own copy
+    thread_spectra = np.zeros((grid, wave_size))
+
+    for iy in prange(grid):
+        y = y_positions[iy]
+        local_spectrum = np.zeros(wave_size)
+        for iz in range(grid):
+            z = z_positions[iz]
+
+            if (y**2 + z**2) <= 1.0:
+                r_cos, limb = ld(y, z, u1, u2)
+                delta = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i, cb1)
+                nprof=random_pick(numb_prof)
+                shifted_spectrum = doppler_shift(
+                    spec[nprof].wave,spec[nprof].flux(r_cos), delta * 1e3
+                )
+                local_spectrum += shifted_spectrum * limb
+
+        thread_spectra[iy, :] = local_spectrum
+
+    # Reduce the result after the parallel loop
+    total_spectrum = np.sum(thread_spectra, axis=0)
+    return total_spectrum
+
+@numba.njit()
+def itot_spectrum_par_grid(
+    v_eq: float64,
+    i: float64,
+    u1: float64,
+    u2: float64,
+    alphaB: float64,
+    alphaC: float64,
+    cb1: float64,
+    grid: int32,
+    spec
+) -> np.ndarray:
+    """
+    Calculate the spectrum in each cell of the grid and integrate over the entire
+    stellar disc.
+    This function uses parallel processing to speed up the calculation.
+    Arguments
+    ---------
+    v_eq : float64
+        Equatorial linear velocity in km/s.
+    i : float64
+        Inclination angle in degrees.
+    u1 : float64
+        Quadratic limb-darkening coefficient.
+    u2 : float64
+        Quadratic limb-darkening coefficient.
+    alphaB : float64
+        Relative coefficient for sin²(latitude) term.
+    alphaC : float64
+        Relative coefficient for sin⁴(latitude) term.
+    cb1 : float64
+        Additional constant velocity term (e.g. convective blueshift) in m/s.
+    grid : int32
+        Grid size (number of cells along one dimension).
+    spec : Spectrum
+        Spectrum object containing wavelength and flux data.
+    Returns
+    -------
+    np.ndarray
+        Integrated spectrum over the entire stellar disc.
+    """
+    i = i * np.pi / 180.0  # Convert degrees to radians
+    delta_grid = 2.0 / grid
+    wave_size = len(spec[0].wave)
+    y_positions = np.linspace(-1.0 + delta_grid / 2.0, 1.0 - delta_grid / 2.0, grid)
+    z_positions = np.linspace(-1.0 + delta_grid / 2.0, 1.0 - delta_grid / 2.0, grid)
+    numb_prof=len(spec)
+    # Each thread writes to its own copy
+    thread_spectra = np.zeros((grid, wave_size))
+    save_shift=np.zeros((grid,grid))
+    for iy in range(grid):
+        y = y_positions[iy]
+        local_spectrum = np.zeros(wave_size)
+        for iz in range(grid):
+            z = z_positions[iz]
+
+            if (y**2 + z**2) <= 1.0:
+                r_cos, limb = ld(y, z, u1, u2)
+                nprof=random_pick(numb_prof)
+                local_spectrum = spec[nprof].flux(r_cos)
+                save_shift[iy,iz]=fit_gaussian(spec[nprof].wave,local_spectrum)
+    return save_shift
+
+
+@numba.njit(cache=True, fastmath=True)
+def gaussian(x, params):
+    # params: [A, mu, sigma, C]
+    A = params[0]
+    mu = params[1]
+    sigma = params[2]
+    C = params[3]
+    inv2sig2 = 0.5 / (sigma * sigma)
+    out = np.empty_like(x)
+    for i in range(x.shape[0]):
+        dx = x[i] - mu
+        out[i] = A * np.exp(-(dx * dx) * inv2sig2) + C
+    return out
+
+@numba.njit(cache=True, fastmath=True)
+def jacobian_gaussian(x, params):
+    # Returns J with shape (len(x), 4)
+    A = params[0]
+    mu = params[1]
+    sigma = params[2]
+
+    n = x.shape[0]
+    J = np.empty((n, 4), dtype=np.float64)
+
+    inv_sig2 = 1.0 / (sigma * sigma)
+    inv_sig3 = inv_sig2 / sigma
+    half_inv_sig2 = 0.5 * inv_sig2
+
+    for i in range(n):
+        dx = x[i] - mu
+        e = np.exp(-(dx * dx) * half_inv_sig2)
+        # dA
+        J[i, 0] = e
+        # dmu = (x - mu) / sigma^2 * A * exp(...)
+        J[i, 1] = dx * inv_sig2 * A * e
+        # dsigma = ((x - mu)^2 / sigma^3) * A * exp(...)
+        J[i, 2] = (dx * dx) * inv_sig3 * A * e
+        # dC
+        J[i, 3] = 1.0
+
+    return J
+
+@numba.njit(cache=True, fastmath=True)
+def levenberg_marquardt(func, jacobian, x_data, y_data, theta_init,
+                        max_iter=200, tol=1e-8, lambda_init=1e-2):
+    theta = np.array(theta_init, dtype=np.float64)
+    lam = lambda_init
+
+    # Fixed-size identity for 4 parameters
+    I = np.eye(theta.shape[0], dtype=np.float64)
+
+    prev_norm = np.inf
+    for _ in range(max_iter):
+        y_hat = func(x_data, theta)
+        residuals = y_hat - y_data
+
+        J = jacobian(x_data, theta)
+        # JTJ and JTr
+        JTJ = J.T @ J
+        JTr = J.T @ residuals
+
+        A = JTJ + lam * I
+        # Solve A * delta = JTr
+        delta = np.linalg.solve(A, JTr)
+
+        # Candidate update
+        theta_new = theta - delta
+        y_hat_new = func(x_data, theta_new)
+        residuals_new = y_hat_new - y_data
+
+        norm_new = 0.0
+        for k in range(residuals_new.shape[0]):
+            norm_new += residuals_new[k] * residuals_new[k]
+        norm_new = np.sqrt(norm_new)
+
+        if norm_new < prev_norm:
+            # Accept and decrease damping
+            theta = theta_new
+            prev_norm = norm_new
+            lam *= 0.1
+        else:
+            # Reject and increase damping
+            lam *= 10.0
+
+        # Convergence on parameter step size
+        step_norm = 0.0
+        for k in range(delta.shape[0]):
+            step_norm += delta[k] * delta[k]
+        if np.sqrt(step_norm) < tol:
+            break
+
+    return theta
+
+@numba.njit
+def fit_gaussian(x,y):
+    params=levenberg_marquardt(gaussian, jacobian_gaussian,x,y,[1,np.mean(x),0.2,1])
+    return(params[1])
 
 @numba.njit(nopython=True, cache=True)
 def linear_interpolator(x:np.ndarray, y: np.ndarray, new_x:np.ndarray) -> np.ndarray:

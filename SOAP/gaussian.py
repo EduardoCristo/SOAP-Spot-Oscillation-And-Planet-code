@@ -291,11 +291,6 @@ def compute_rv_fwhm(rv: np.ndarray, ccf: np.ndarray):
         ccf,
         np.array([abs(np.max(ccf) - np.min(ccf)), 0, 3, np.max(ccf)]),
     )
-    # import matplotlib.pyplot as plt
-    # plt.plot(rv,ccf,".k")
-    # plt.plot(rv,gaussian(rv,res),".r")
-    # plt.plot(rv,gaussian(rv,np.array([np.min(ccf)-np.max(ccf),0, 3,np.max(ccf)])),".g")
-    # plt.show()
     return res[1], 2 * np.sqrt(2 * np.log(2)) * res[2]
 
 

@@ -574,11 +574,10 @@ class Simulation:
                 )
 
         else:
-            precompile_functions()
-            pixel = self.pixel.to_numba()
-            # pixel = without_units(self.pixel)
-            flux_quiet = stspnumba.itot_flux(star.u1, star.u2, self.grid)
-            pixel_quiet = stspnumba.itot_spectrum_par(
+            if type(self.pixel).__name__=="Spec_Grass":
+                pixel = self.pixel.to_numba()
+                flux_quiet = stspnumba.itot_flux(star.u1, star.u2, self.grid)
+                pixel_quiet = stspnumba.itot_spectrum_par_np(
                 star.vrot,
                 star.incl,
                 star.u1,
@@ -589,6 +588,22 @@ class Simulation:
                 self.grid,
                 pixel,
             )
+            else:
+                precompile_functions()
+                pixel = self.pixel.to_numba()
+                # pixel = without_units(self.pixel)
+                flux_quiet = stspnumba.itot_flux(star.u1, star.u2, self.grid)
+                pixel_quiet = stspnumba.itot_spectrum_par(
+                    star.vrot,
+                    star.incl,
+                    star.u1,
+                    star.u2,
+                    self.star.diffrotB,
+                    self.star.diffrotC,
+                    self.star.cb1,
+                    self.grid,
+                    pixel,
+                )
 
         if DEBUG:
             print("finished itot, took %f sec" % (time.time() - t1))
