@@ -45,7 +45,7 @@ def visualize(sim, out, plot_type, lim=None, ref_wave=None, plot_lims=None, show
     # Grid resolution, geometry, and arrays (match animate)
     grid_res = 0.0005
     Vsini = (2 * np.pi * sim.star.radius.value * 696340) / (sim.star.prot.value * 24 * 3600)
-    i = np.radians(180-sim.star.incl.value)
+    i = np.radians(sim.star.incl.value)
 
     ys = np.linspace(-1.5, 1.5, int(max(2, 1.0 / grid_res)))
     zs = np.linspace(-1.5, 1.5, int(max(2, 1.0 / grid_res)))
@@ -156,20 +156,20 @@ def visualize(sim, out, plot_type, lim=None, ref_wave=None, plot_lims=None, show
         # Spots consistent with animate: draw once per phase overlay if desired
         if len(sim.active_regions) != 0:
             # Use the first unmasked phase to position spots (static snapshot choice)
-            idx0 = sel[0]
-            for j in sim.active_regions:
-                spot = spot_init(j.size, (j.lon).value, (j.lat).value, (sim.star.incl).value, 40)
-                spot_phase_position = spot_phase(spot, (sim.star.incl).value, out.psi[idx0] - out.psi[0] / 2)
-                if j.active_region_type == 0:
-                    facecolor = "black"
-                else:
-                    facecolor = "yellow"
-                polygon = Polygon(
-                    np.array([spot_phase_position[:, 1], spot_phase_position[:, 2]]).T,
-                    closed=True,
-                    facecolor=facecolor,
-                )
-                axs[0].add_patch(polygon)
+            for idx0 in sel:
+                for j in sim.active_regions:
+                    spot = spot_init(j.size, (j.lon).value, (j.lat).value, (sim.star.incl).value, 40)
+                    spot_phase_position = spot_phase(spot, (sim.star.incl).value, out.psi[idx0])
+                    if j.active_region_type == 0:
+                        facecolor = "black"
+                    else:
+                        facecolor = "yellow"
+                    polygon = Polygon(
+                        np.array([spot_phase_position[:, 1], spot_phase_position[:, 2]]).T,
+                        closed=True,
+                        facecolor=facecolor,
+                    )
+                    axs[0].add_patch(polygon)
 
     # Right panel behavior consistent with animate
     cmap_phase = planet_gradient_2
@@ -523,7 +523,7 @@ def animate_visualization(
 
         if len(spot_polys) != 0 and np.any(~phase_mask):
             for (poly, spot, active_region_type) in spot_polys:
-                spp = spot_phase(spot, (sim.star.incl).value, out.psi[sel[frame]] - out.psi[0] / 2)
+                spp = spot_phase(spot, (sim.star.incl).value, out.psi[sel[frame]])
                 vis=spp.T[0]>0
                 if vis.any():
                     poly.set_xy(np.array([spp[:, 1], spp[:, 2]]).T)
