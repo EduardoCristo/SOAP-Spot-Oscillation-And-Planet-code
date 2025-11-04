@@ -8,12 +8,14 @@ from airvacuumvald import vacuum_to_air
 from astropy.io import fits
 from expecto import get_spectrum
 from scipy.interpolate import RegularGridInterpolator
+import numba
 
 from .fast_starspot import doppler_shift
 from .gaussian import ip_convolution
 from .units import U, has_unit, kms, maybe_quantity_input, unit_arange
 from .utils import c, read_rdb, sqrt2pi
-
+from numba import float64, int32
+from numba.experimental import jitclass
 
 def set_object_attributes(object, attrs):
     """
@@ -618,9 +620,6 @@ class gaussianCCF(CCF):
         pars = f"depth={self._depth:.3f}, fwhm={self._fwhm:.3f}"
         return f"gaussianCCF({pars})"
 
-from numba import float64, int32
-from numba.experimental import jitclass
-
 spectrum_attr_spec = [("wave", float64[:]), ("flux_arr", float64[:]), ("n", int32)]
 
 
@@ -641,34 +640,63 @@ spectrum2d_attr_spec = [
     ("wave", float64[:]),
     ("flux2d", float64[:, :]),
     ("n", int32),
-    # ('interp', RegularGridInterpolator),
+    ("μ", float64[:])
 ]
 
+@numba.njit
+def _find_interval(x, grid):
+    # Return i such that grid[i] <= x <= grid[i+1], clamped to [0, len-2]
+    n = grid.size
+    if x <= grid[0]:
+        return 0
+    if x >= grid[n-2]:
+        return n - 2
+    lo = 0
+    hi = n - 1
+    while lo <= hi:
+        mid = (lo + hi) >> 1
+        if grid[mid] <= x:
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    i = hi
+    if i < 0:
+        i = 0
+    if i > n - 2:
+        i = n - 2
+    return i
+
+@numba.njit
+def _blend_rows(mu, mu_grid, flux_mu_wave):
+    # flux_mu_wave shape: (M_mu, N_wave) == flux2d.T
+    # linear interpolation along μ, returning one spectrum of length N_wave
+    if mu <= mu_grid[0]:
+        return flux_mu_wave[0].copy()
+    if mu >= mu_grid[-1]:
+        return flux_mu_wave[-1].copy()
+    i = _find_interval(mu, mu_grid)
+    mu0 = mu_grid[i]
+    mu1 = mu_grid[i+1]
+    t = (mu - mu0) / (mu1 - mu0)
+    return (1.0 - t) * flux_mu_wave[i] + t * flux_mu_wave[i+1]
 
 @jitclass(spectrum2d_attr_spec)
 class SpectrumNumbaInterpolated:
-    def __init__(self, wave, flux2d):
+    def __init__(self, wave, flux2d, μ):
         self.n = wave.size
         self.wave = wave
         self.flux2d = flux2d
-
-    # def interpolate(self):
-    #     with objmode():
-    #     return interp
+        self.μ = μ
 
     def flux(self, mu=0.0):
-        # don't do extrapolations, use the μ=0.2 spectrum
-        if mu < 0.2:
+        # identical boundary policy as before (no extrapolation)
+        if mu < np.min(self.μ):
             return self.flux2d[:, 0]
-        # do interpolation
-        μ = np.array(
-            [0.2, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.97, 0.98, 0.99, 1.0]
-        )
-        xi = np.column_stack((np.full(self.wave.size, mu), self.wave))
-        with objmode(y="float64[:]"):
-            interp = RegularGridInterpolator((μ, self.wave), self.flux2d.T)
-            y = interp(xi)
-        return y
+        # elif mu > np.max(self.μ):
+        #     return self.flux2d[:, -1]
+        # interpolate along μ only; wavelength samples are native, so no λ interpolation required
+        # flux2d is (N_wave, M_mu); transpose once on-the-fly for μ-major access
+        return _blend_rows(mu, self.μ, self.flux2d.T)
 
 
 class Spectrum:
@@ -919,7 +947,7 @@ class Spec_mu(Spectrum):
 
     def to_numba(self):
         return SpectrumNumbaInterpolated(
-            self.wave.astype(float), self.flux.astype(float)
+            self.wave.astype(float), self.flux.astype(float),self.μ.astype(float)
         )
 
 class solarIAGatlas(Spectrum):
@@ -982,7 +1010,7 @@ class solarIAGatlas(Spectrum):
 
     def to_numba(self):
         return SpectrumNumbaInterpolated(
-            self.wave.astype(float), self.flux.astype(float)
+            self.wave.astype(float), self.flux.astype(float),self.μ.astype(float)
         )
 
 
