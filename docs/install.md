@@ -1,4 +1,4 @@
-SOAP is written Python.
+SOAP is written in Python.
 To install run the following commands:
 
 ```bash
