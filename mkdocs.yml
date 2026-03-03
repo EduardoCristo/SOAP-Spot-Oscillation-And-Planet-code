@@ -70,10 +70,6 @@ plugins:
           options:
             filters:
               - "!^_"
-  - bibtex:
-      bib_file: "docs/soap_refs.bib"  # Add ADS BibTeX export here
-      enable_inline_citations: true
-
 extra:
   social:
     - icon: fontawesome/brands/github
