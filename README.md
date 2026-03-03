@@ -29,5 +29,5 @@ then you can use SOAP from Python with:
 ```bash
 import SOAP
 ```
-
-### How to cite this code
+### Cite this code
+Please check [here](https://eduardocristo.github.io/SOAP-Spot-Oscillation-And-Planet-code/Acknowledgements/)
