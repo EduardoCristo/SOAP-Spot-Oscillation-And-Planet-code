@@ -40,6 +40,8 @@ markdown_extensions:
   - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true
+  - attr_list
+  - md_in_html
 nav:
   - Home: index.md
 
@@ -55,6 +57,9 @@ nav:
 
   - API Reference: reference.md
 
+  - Contacts: contacts.md
+  - Acknowledgements: Acknowledgements.md
+
 plugins:
   - search
   - mkdocs-jupyter
@@ -65,6 +70,10 @@ plugins:
           options:
             filters:
               - "!^_"
+  - bibtex:
+      bib_file: "docs/soap_refs.bib"  # Add ADS BibTeX export here
+      enable_inline_citations: true
+
 extra:
   social:
     - icon: fontawesome/brands/github
