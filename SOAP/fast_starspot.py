@@ -9,23 +9,6 @@ from .utils import c
 c = c.value
 
 
-@numba.njit(cache=True)
-def sincos(x: float64) -> np.ndarray:
-    """
-    Calculate the sine and cosine of a number using Numba's math module.
-
-    Arguments
-    ---------
-    x : float64
-        The input value in radians.
-    Returns
-    -------
-    np.ndarray
-        An array containing the sine and cosine of the input value.
-    """
-    return [numba.math.sin(x), numba.math.cos(x)]
-
-
 @numba.njit("f8(f8, f8)", cache=True)
 def planck_law(λ, T):
     """
@@ -49,21 +32,23 @@ def planck_law(λ, T):
 
 
 @numba.njit(cache=True, nopython=True)
-def itot_flux(u1: np.float64, u2: np.float64, grid: np.int32):
+def itot_flux(coeffs:numba.float64[:], law: int, grid: np.int32):
     """
     Calculate the flux in each cell of the grid and integrate over the entire
     stellar disc.
 
     Arguments
     ---------
-    u1, u2 : float
-        Quadratic limb-darkening parameters
+    coeffs : np.ndarray
+        Limb-darkening coefficients
+    law : int
+        Law code (use LD_* constants above)
     grid : int
         Grid size
     """
     # step of the grid. grid goes from -1 to 1, therefore 2 in total
     delta_grid = 2.0 / grid
-    # total stellar intensity (without spots)
+    # total stellar intensity (without ARs)
     total = 0
     y_positions = np.linspace(-1.0 + delta_grid / 2.0, 1.0 - delta_grid / 2.0, grid)
     z_positions = np.linspace(-1.0 + delta_grid / 2.0, 1.0 - delta_grid / 2.0, grid)
@@ -73,8 +58,8 @@ def itot_flux(u1: np.float64, u2: np.float64, grid: np.int32):
             # projected radius on the sky smaller than 1,
             # which means that we are on the stellar disc
             if (y**2 + z**2) <=1:
-                _, limb = ld(y, z, u1, u2)
-                total+= limb # check this
+                _, limb = ld(y, z, coeffs,law)
+                total+= limb
 
     return total
 
@@ -118,20 +103,58 @@ def doppler_shift(wave: np.ndarray, flux: np.ndarray, rv: float):
 
 
 @numba.njit(cache=True, nopython=True)
-def ld(y: float, z: float, u1: float, u2: float):
+def ld(y: float, z: float, coeffs: np.ndarray, law: int):
     """
     Calculate the limb-darkening intensity at position (y, z) on the stellar
-    surface, using a limb-darkening law defined by u1, u2
+    surface using the specified limb-darkening law.
 
     Args:
-        y (float): y position in the stellar grid
-        z (float): z position in the stellar grid
-        u1 (float): Limb-darkening linear coefficient
-        u2 (float): Limb-darkening quadratic coefficient
-    """
-    r_cos = np.sqrt(1.0 - (y * y + z * z))
-    return r_cos, 1.0 - u1 * (1.0 - r_cos) - u2 * (1.0 - r_cos) * (1.0 - r_cos)
+        y      (float):          y position in the stellar grid
+        z      (float):          z position in the stellar grid
+        coeffs (float64 array):  Limb-darkening coefficients.
+        law    (int):            Limb-darkening law code (0: linear, 1: quadratic, 2: square root, 3: logarithmic, 4: exponential, 5: Claret's non-linear).
 
+    Returns:
+        tuple: (mu, intensity)
+    """
+    mu = np.sqrt(1.0 - (y * y + z * z))
+
+    if law == 0:
+        # I(mu) = 1 - u1*(1 - mu)
+        I = 1.0 - coeffs[0] * (1.0 - mu)
+
+    elif law == 1:
+        # I(mu) = 1 - u1*(1 - mu) - u2*(1 - mu)^2
+        om = 1.0 - mu
+        I = 1.0 - coeffs[0] * om - coeffs[1] * om * om
+
+    elif law == 2:
+        # I(mu) = 1 - u1*(1 - mu) - u2*(1 - sqrt(mu))
+        I = 1.0 - coeffs[0] * (1.0 - mu) - coeffs[1] * (1.0 - np.sqrt(mu))
+
+    elif law == 3:
+        # I(mu) = 1 - u1*(1 - mu) - u2*mu*ln(mu)
+        # Guard against mu=0 to avoid log(0)
+        lnmu = np.log(mu)# if mu > 0.0 else 0.0
+        I = 1.0 - coeffs[0] * (1.0 - mu) - coeffs[1] * mu * lnmu
+
+    elif law == 4:
+        # I(mu) = 1 - u1*(1 - mu^u2)
+        I = 1.0 - coeffs[0] * (1.0 - mu ** coeffs[1])
+
+    elif law == 5:
+        # I(mu) = 1 - sum_{n=1}^{4} c_n*(1 - mu^(n/2))
+        sqrt_mu = np.sqrt(mu)
+        I = (1.0
+             - coeffs[0] * (1.0 - sqrt_mu)
+             - coeffs[1] * (1.0 - mu)
+             - coeffs[2] * (1.0 - mu * sqrt_mu)
+             - coeffs[3] * (1.0 - mu * mu))
+
+    else:
+        I = 1.0  # fallback: no darkening
+
+    return mu, I
 
 @numba.njit(cache=True, nopython=True)
 def vrot(v_eq, r_cos, y, z, alphaB, alphaC, i, cb1):
@@ -181,8 +204,8 @@ def vrot(v_eq, r_cos, y, z, alphaB, alphaC, i, cb1):
 def itot_spectrum_par(
     v_eq: float64,
     i: float64,
-    u1: float64,
-    u2: float64,
+    coeffs: numba.float64[:],
+    law: int,
     alphaB: float64,
     alphaC: float64,
     cb1: float64,
@@ -199,10 +222,10 @@ def itot_spectrum_par(
         Equatorial linear velocity in km/s.
     i : float64
         Inclination angle in degrees.
-    u1 : float64
-        Quadratic limb-darkening coefficient.
-    u2 : float64
-        Quadratic limb-darkening coefficient.
+    coeffs : numba.float64[:]
+        Array of limb-darkening coefficients.
+    law : int
+        Limb-darkening law to use.
     alphaB : float64
         Relative coefficient for sin²(latitude) term.
     alphaC : float64
@@ -234,7 +257,7 @@ def itot_spectrum_par(
             z = z_positions[iz]
 
             if (y**2 + z**2) <= 1.0:
-                r_cos, limb = ld(y, z, u1, u2)
+                r_cos, limb = ld(y, z, coeffs,law)
                 delta = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i, cb1)
                 shifted_spectrum = doppler_shift(
                     spec.wave, spec.flux(r_cos), delta * 1e3
@@ -316,8 +339,8 @@ def linear_interpolator(x:np.ndarray, y: np.ndarray, new_x:np.ndarray) -> np.nda
 def itot_rv(
     v_eq: float64,
     i: float64,
-    u1: float64,
-    u2: float64,
+    coeffs: numba.float64[:],
+    law: int,
     alphaB: float64,
     alphaC: float64,
     cb1: float64,
@@ -332,7 +355,7 @@ def itot_rv(
 
     # step of the grid. grid goes from -1 to 1, therefore 2 in total
     delta_grid = 2.0 / grid
-    # total stellar intensity (without spots)
+    # total stellar intensity (without ARs)
     total = 0
     f_star = np.zeros(n_v)
     rv_vrot = np.linspace(-v_interval, v_interval, n_v)
@@ -346,7 +369,7 @@ def itot_rv(
             # which means that we are on the stellar disc
             if (y**2 + z**2) <=1:
                 # r_cos = np.sqrt(1.0 - (y * y + z * z))
-                r_cos, limb = ld(y, z, u1, u2)
+                r_cos, limb = ld(y, z, coeffs,law)
                 delta = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i, cb1)
                 f_star += linear_interpolator(rv, ccf, rv_vrot - delta) * limb
                 total += limb
@@ -355,22 +378,22 @@ def itot_rv(
 
 
 @numba.njit(cache=True, nopython=True)
-def spot_init(
+def ar_init(
     s: float, longitude: float, latitude: float, inclination: float, nrho: int
 ) -> np.ndarray:
     """
-    Calculate the position of the spot, initialized at the disc center.
+    Calculate the position of the active region, initialized at the disc center.
 
     Args:
-        s: spot radius
+        s: active region radius
         longitude [degree]
         latitude  [degree]
         inclination [degree] i=0  -> pole-on (North)
                              i=90 -> equator-on
-        nrho : Spot circumference resolution
+        nrho : Active region circumference resolution
 
     Returns:
-        xyz : real position of the spot after applying rotations
+        xyz : real position of the active region after applying rotations
     """
 
     # Conversions [deg] -> [rad]
@@ -398,8 +421,8 @@ def spot_init(
     xyz2[1] = s * np.cos(rho)  # projection of the circumference on the y axis
     xyz2[2] = s * np.sin(rho)  # projection of the circumference on the z axis
 
-    # to account for the real projection of the spot, we rotate the star and
-    # look how the coordinates of the circumference of the spot change position
+    # to account for the real projection of the active region, we rotate the star and
+    # look how the coordinates of the circumference of the active region change position
     # according to latitude, longitude and inclination.
     # It consists of three rotations
     #
@@ -452,7 +475,7 @@ def spot_init(
 
 
 @numba.njit(cache=True, nopython=True)
-def spot_phase(xyz, inclination, phase):
+def ar_phase(xyz, inclination, phase):
     """
     Calculate the xyz position of the active region circumference at phase φ
     """
@@ -497,7 +520,7 @@ def spot_phase(xyz, inclination, phase):
 
 
 @numba.njit(cache=True, nopython=True)
-def spot_area(xyz, nrho, grid):
+def ar_area(xyz, nrho, grid):
     """
     Determine a smaller yz-area of the stellar disk where the active region is
     The different cases are:
@@ -579,7 +602,7 @@ def spot_area(xyz, nrho, grid):
 
 
 @numba.njit(cache=True, nopython=True)
-def spot_inverse_rotation(
+def ar_inverse_rotation(
     xyz: np.ndarray, longitude: float, latitude: float, inclination: float, phase: float
 ):
     """
@@ -653,76 +676,134 @@ def spot_inverse_rotation(
     return xyz_out
 
 
-@numba.njit(cache=True, nopython=True)
-def spot_inverse_rotation1(
-    xyz: np.ndarray,
-    longitude: float,
-    latitude: float,
-    inclination: float,
-    phase: float,
-    xyz_out: np.ndarray,
+@numba.njit(cache=True, nopython=True, parallel=True, fastmath=True)
+def ar_scan_rv(
+    v_eq, i, coeffs, law, alphaB, alphaC, cb1,
+    grid, rv, ccf, ccf_ar, v_interval, n_v,
+    s, lon, lat, phase, iminy, iminz, imaxy, imaxz,
+    magn_feature_type,feature_coeffs,feature_law,Tstar, Tdiff, wlll, ar_grid,
+    prot, Rp, P, t0, e, w, ip, a, lbda, fe, fi, theta, ir,
 ):
-    """
-    Relocate a point (x,y,z) to the 'initial' configuration, i.e. when the
-    active region is on the disc center. This consists in rotating the point,
-    according to latitude, longitude, inclination and phase, but in the reverse
-    order.
+    xyzp = planet_position_at_date(phase * prot, P, t0, e, w, ip, a, lbda)
 
-    Conventions:
-    - when inclination=0 the star rotates around z axis
-    - line of sight is along x-axis
-    - sky plane = yz-plane
-    """
+    i_rad = i * pi / 180.0
+    delta_grid = 2.0 / grid
+    delta_grid_half = delta_grid * 0.5
 
-    g2 = (-1.0 + phase) * (2.0 * pi)  # inverse phase ([0-1] -> [rad])
-    deg_to_rad = pi / 180.0
-    i = inclination * deg_to_rad
-    b = latitude * deg_to_rad
-    g = -longitude * deg_to_rad
-    b2 = -(pi / 2.0 - i)
+    wlll = wlll * 1e-10
+    planck_star = planck_law(wlll, Tstar)
 
-    sing2, cosg2 = sincos(g2)
-    sini, cosi = sincos(i)
-    onemcosg2 = 1.0 - cosg2
+    costheta = cos(theta)
+    sintheta = sin(theta)
+    cosir2   = cos(ir) * cos(ir)
+    Rp2      = Rp * Rp
+    fe2_Rp2  = fe * fe * Rp2
+    fi2_Rp2  = fi * fi * Rp2
+    s2       = s * s
 
-    R_00 = onemcosg2 * cosi * cosi + cosg2
-    R_01 = sing2 * sini
-    R_02 = onemcosg2 * cosi * sini
-    R_10 = -sing2 * sini
-    R_11 = cosg2
-    R_12 = sing2 * cosi
-    R_20 = onemcosg2 * sini * cosi
-    R_21 = -sing2 * cosi
-    R_22 = onemcosg2 * sini * sini + cosg2
+    rv_vrot = np.linspace(-v_interval, v_interval, n_v)
 
-    sinb, cosb = sincos(b)
-    sinb2, cosb2 = sincos(b2)
-    sing, cosg = sincos(g)
+    if magn_feature_type == 0:
+        T_spot = temperature_spot(Tstar, Tdiff)
+        intensity_precomputed = planck_law(wlll, T_spot) / planck_star
 
-    R2_00 = cosb * cosg * cosb2 - sinb2 * sinb
-    R2_01 = -sing * cosb
-    R2_02 = cosb * cosg * sinb2 + sinb * cosb2
-    R2_10 = sing * cosb2
-    R2_11 = cosg
-    R2_12 = sing * sinb2
-    R2_20 = -sinb * cosg * cosb2 - cosb * sinb2
-    R2_21 = sinb * sing
-    R2_22 = -sinb * cosg * sinb2 + cosb * cosb2
+    xyzp0 = xyzp[0]
+    xyzp1 = xyzp[1]
+    xyzp2 = xyzp[2]
 
-    R3_00 = R2_00 * R_00 + R2_01 * R_10 + R2_02 * R_20
-    R3_01 = R2_00 * R_01 + R2_01 * R_11 + R2_02 * R_21
-    R3_02 = R2_00 * R_02 + R2_01 * R_12 + R2_02 * R_22
-    R3_10 = R2_10 * R_00 + R2_11 * R_10 + R2_12 * R_20
-    R3_11 = R2_10 * R_01 + R2_11 * R_11 + R2_12 * R_21
-    R3_12 = R2_10 * R_02 + R2_11 * R_12 + R2_12 * R_22
-    R3_20 = R2_20 * R_00 + R2_21 * R_10 + R2_22 * R_20
-    R3_21 = R2_20 * R_01 + R2_21 * R_11 + R2_22 * R_21
-    R3_22 = R2_20 * R_02 + R2_21 * R_12 + R2_22 * R_22
+    n_rows = imaxy - iminy
 
-    xyz_out[0] = R3_00 * xyz[0] + R3_01 * xyz[1] + R3_02 * xyz[2]
-    xyz_out[1] = R3_10 * xyz[0] + R3_11 * xyz[1] + R3_12 * xyz[2]
-    xyz_out[2] = R3_20 * xyz[0] + R3_21 * xyz[1] + R3_22 * xyz[2]
-    # return xyz_out
+    # 2D accumulators: one row per iy — avoids array += reduction in prange
+    all_bconv = np.zeros((n_rows, n_v))
+    all_flux  = np.zeros((n_rows, n_v))
+    all_tot   = np.zeros((n_rows, n_v))
+
+    for iy in prange(iminy, imaxy):
+        local_xyza  = np.empty(3)
+        local_xyzi  = np.empty(3)
+        rv_shifted  = np.empty(n_v)
+        row = iy - iminy  # index into 2D accumulator
+
+        for iz in range(iminz, imaxz):
+
+            if ar_grid[iy, iz]:
+                continue
+
+            y = -1.0 + iy * delta_grid + delta_grid_half
+            z = -1.0 + iz * delta_grid + delta_grid_half
+
+            if z * z + y * y < 1.0:
+                r_cos, limb = ld(y, z, coeffs,law)
+
+                dp1 = y - xyzp1
+                dp2 = z - xyzp2
+
+                t1 = costheta * dp1 + sintheta * dp2
+                t2 = sintheta * dp1 - costheta * dp2
+                t1_sq = t1 * t1
+                t2_sq_over_cosir2 = t2 * t2 / cosir2
+
+                a_loc = dp1 * dp1 + dp2 * dp2
+
+                if Rp != 0.0:
+                    aringin  = t1_sq / fi2_Rp2 + t2_sq_over_cosir2 / fi2_Rp2
+                    aringout = t1_sq / fe2_Rp2 + t2_sq_over_cosir2 / fe2_Rp2
+                else:
+                    aringin  = 0.0
+                    aringout = 1.1
+
+                if (
+                    (aringin < 1.0 and a_loc >= Rp2)
+                    or (aringout > 1.0 and a_loc >= Rp2)
+                    or (xyzp0 < 0.0)
+                ):
+                    local_xyza[0] = r_cos
+                    local_xyza[1] = y
+                    local_xyza[2] = z
+                    local_xyzi = ar_inverse_rotation(local_xyza, lon, lat, i, phase)
+
+                    if local_xyzi[0] * local_xyzi[0] >= 1.0 - s2:
+                        _,limb_feature= ld(y,z, feature_coeffs, feature_law)
+                        ar_grid[iy, iz] = True
+
+                        delta_quiet = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, cb1)
+                        delta_ar  = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, 0.0)
+
+                        if magn_feature_type == 0:
+                            intensity = intensity_precomputed
+                        else:
+                            T_plage   = temperature_plage(Tstar, Tdiff, r_cos)
+                            intensity = planck_law(wlll, T_plage) / planck_star
+
+                        for k in range(n_v):
+                            rv_shifted[k] = rv_vrot[k] - delta_quiet
+                        shifted_quiet = linear_interpolator(rv, ccf, rv_shifted)
+
+                        for k in range(n_v):
+                            rv_shifted[k] = rv_vrot[k] - delta_ar
+                        shifted_ar = linear_interpolator(rv, ccf_ar, rv_shifted)
+
+                        for k in range(n_v):
+                            sq_k = shifted_quiet[k]
+                            ss_k = shifted_ar[k]
+                            all_flux [row, k] += sq_k*(limb-limb_feature*intensity)  #sq_k * limb * (1.0 - intensity) # flux missing due to the active region, using the quiet spectrum
+                            all_bconv[row, k] += sq_k*limb-ss_k*limb_feature #(sq_k - ss_k) * limb # RV contribution of the active region, using the difference between quiet and active region spectrum
+                            all_tot  [row, k] += sq_k*limb-intensity*limb_feature*ss_k #(sq_k - intensity * ss_k) * limb # total flux in the cell, using the active region spectrum weighted by the intensity of the active region
+
+    # Final reduction — sum over rows (sequential, trivially fast)
+    f_ar_bconv = np.zeros(n_v)
+    f_ar_flux  = np.zeros(n_v)
+    f_ar_tot   = np.zeros(n_v)
+    for row in range(n_rows):
+        for k in range(n_v):
+            f_ar_bconv[k] += all_bconv[row, k]
+            f_ar_flux [k] += all_flux [row, k]
+            f_ar_tot  [k] += all_tot  [row, k]
+
+    return f_ar_bconv, f_ar_flux, f_ar_tot
+
+
+
 
 
 @numba.njit(cache=True, nopython=True)
@@ -736,10 +817,10 @@ def temperature_plage(Tstar, Tdiff, r_cos):
 
 
 @numba.njit(cache=True, nopython=True)
-def spot_scan_flux(
+def ar_scan_flux(
     i,
-    u1,
-    u2,
+    coeffs,
+    law,
     grid,
     s,
     lon,
@@ -750,6 +831,8 @@ def spot_scan_flux(
     imaxy,
     imaxz,
     magn_feature_type,
+    feature_coeffs,
+    feature_law,
     Tstar,
     Tdiff,
     wlll,
@@ -769,12 +852,12 @@ def spot_scan_flux(
     ir,
 ):
     """
-    Scan of the yz-area where the spot is.
-    For each grid point (y,z) we need to check whether it belongs to the spot
-    or not. Sadly, we do not know the projected geometry of the spot in its
+    Scan of the yz-area where the AR is.
+    For each grid point (y,z) we need to check whether it belongs to the active region
+    or not. Sadly, we do not know the projected geometry of the active region in its
     actual position. Thus, we have to do an inverse rotation to replace the
-    grid powhere it would be in the initial configuration. Indeed, in the
-    initial configuration, the spot has a well known geometry of a circle
+    grid point where it would be in the initial configuration. Indeed, in the
+    initial configuration, the active region has a well known geometry of a circle
     centered on the x-axis.
     """
 
@@ -789,7 +872,7 @@ def spot_scan_flux(
     xyza = np.empty(3)
     xyzi = np.empty(3)
 
-    sum_spot = 0.0
+    sum_ar = 0.0
 
     # Constant quantities
     costheta = cos(theta)
@@ -800,11 +883,11 @@ def spot_scan_flux(
     fi2_Rp2 = pow(fi, 2) * Rp2
 
     # Scan of each cell on the grid
-    for iy in prange(iminy, imaxy):
+    for iy in range(iminy, imaxy):
         y = -1.0 + iy * delta_grid+delta_grid/2  # y between -1 et 1
         xyza[1] = y
 
-        for iz in prange(iminz, imaxz):
+        for iz in range(iminz, imaxz):
             if ar_grid[iy, iz]:
                 continue
 
@@ -814,7 +897,7 @@ def spot_scan_flux(
                 # sqrt(r^2 - (y^2+z^2)) where r=1.
                 # This is equal to 1 at the disc center, and 0 on the limb.
                 # Often referred in the literature as cos(theta)
-                r_cos, limb = ld(y, z, u1, u2)
+                r_cos, limb = ld(y, z, coeffs,law)
 
                 xyza[2] = z
                 xyza[0] = r_cos
@@ -847,12 +930,13 @@ def spot_scan_flux(
                     or (xyzp[0] < 0.0)
                 ):
 
-                    # Rotate the star so that the spot is on the disc center
-                    xyzi = spot_inverse_rotation(xyza, lon, lat, i, phase)
+                    # Rotate the star so that the active region is on the disc center
+                    xyzi = ar_inverse_rotation(xyza, lon, lat, i, phase)
 
                     # if inside the active region when scanning the grid
                     if xyzi[0] ** 2 >= 1.0 - s**2:
                         ar_grid[iy, iz] = True
+                        _,limb_feature= ld(y,z, feature_coeffs, feature_law)
 
                         if magn_feature_type == 0:
                             # intensity of the spot
@@ -868,194 +952,23 @@ def spot_scan_flux(
                         # calculates the "non contributing" total flux of the active
                         # region taking into account the limb-darkening and the
                         # active region intensity
-                        sum_spot += limb * (1.0 - intensity)
+                        sum_ar += limb - limb_feature*intensity
 
-    return sum_spot
-
-
-@numba.njit(cache=True, nopython=True)
-def spot_scan_rv(
-    v_eq,
-    i,
-    u1,
-    u2,
-    alphaB,
-    alphaC,
-    cb1,
-    grid,
-    rv,
-    ccf,
-    ccf_spot,
-    v_interval,
-    n_v,
-    s,
-    lon,
-    lat,
-    phase,
-    iminy,
-    iminz,
-    imaxy,
-    imaxz,
-    magn_feature_type,
-    Tstar,
-    Tdiff,
-    wlll,
-    ar_grid,
-    prot,
-    Rp,
-    P,
-    t0,
-    e,
-    w,
-    ip,
-    a,
-    lbda,
-    fe,
-    fi,
-    theta,
-    ir,
-):
-    """
-    Scan of the yz-area where the spot is.
-    For each grid point (y,z) we need to check whether it belongs to the spot
-    or not. Sadly, we do not know the projected geometry of the spot in its
-    actual position. Thus, we have to do an inverse rotation to replace the
-    grid powhere it would be in the initial configuration. Indeed, in the
-    initial configuration, the spot has a well known geometry of a circle
-    centered on the x-axis.
-    """
-    i_rad = i * pi / 180.0  # [degree] --> [radian]
-
-    # step of the grid. grid goes from -1 to 1, therefore 2 in total
-    delta_grid = 2.0 / grid
-    # v_interval is from the velocity 0 to the edge of the spectrum taking into
-    # account minimal or maximal rotation (width - v to 0 or 0 to width + v).
-    # n_v is the number of points for all the CCF from minimum rotation to
-    # maximum one (from width - v to width + v). n_v represent therefore the
-    # double than v_interval, we therefore have to multiply v_interval by 2.
-
-    # step in speed of the CCF. There is (n_v-1) intervals
-    delta_v = 2.0 * v_interval / (n_v - 1)
-
-    n = rv.size
-
-    wlll = wlll * 1e-10
-    planck_star = planck_law(wlll, Tstar)
-
-    # xyza # actual coordinates
-    # xyzi # coordinates transformed back to the initial configuration
-    xyza = np.empty(3)
-    xyzi = np.empty(3)
-
-    f_spot_bconv = np.zeros(n_v)
-    f_spot_flux = np.zeros(n_v)
-    f_spot_tot = np.zeros(n_v)
-
-    xyzp = planet_position_at_date(phase * prot, P, t0, e, w, ip, a, lbda)
-
-    # Constant quantities
-    costheta = cos(theta)
-    sintheta = sin(theta)
-    cosir2 = pow(cos(ir), 2)
-    Rp2 = pow(Rp, 2)
-    fe2_Rp2 = pow(fe, 2) * Rp2
-    fi2_Rp2 = pow(fi, 2) * Rp2
-    rv_vrot = np.linspace(-v_interval, v_interval, n_v)
-
-    # Scan of each cell on the grid
-    for iy in range(iminy, imaxy):
-        for iz in range(iminz, imaxz):
-
-            if ar_grid[iy, iz]:
-                continue
-
-            y = -1.0 + iy * delta_grid+ delta_grid/2  # y between -1 et 1
-            xyza[1] = y
-
-            z = -1.0 + iz * delta_grid+ delta_grid/2  # z between -1 et 1
-            xyza[2] = z
-
-            # projected radius on the sky smaller than 1: we are on the stellar
-            # disc
-            if z * z + y * y < 1.0:
-                r_cos, limb = ld(y, z, u1, u2)
-                xyza[0] = r_cos
-
-                dp1 = xyza[1] - xyzp[1]
-                dp2 = xyza[2] - xyzp[2]
-
-                costheta_dp1 = costheta * dp1
-                costheta_dp2 = costheta * dp2
-                sintheta_dp1 = sintheta * dp1
-                sintheta_dp2 = sintheta * dp2
-
-                # Check if the planet is in-front off the active region
-                a = dp1**2.0 + dp2**2.0
-
-                if Rp != 0:
-                    aringin = (costheta_dp1 + sintheta_dp2) ** 2 / fi2_Rp2 + (
-                        (sintheta_dp1 - costheta_dp2) ** 2 / (cosir2 * fi2_Rp2)
-                    )
-
-                    aringout = (costheta_dp1 + sintheta_dp2) ** 2 / fe2_Rp2 + (
-                        (sintheta_dp1 - costheta_dp2) ** 2 / (cosir2 * fe2_Rp2)
-                    )
-                else:
-                    aringin = 0
-                    aringout = 1.1
-
-                if (
-                    ((aringin < 1) and (a >= Rp2))
-                    or ((aringout > 1) and (a >= Rp2))
-                    or (xyzp[0] < 0.0)
-                ):
-
-                    # xyza --> xyzi:
-                    # Rotate the star so that the spot is on the disc center
-                    xyzi = spot_inverse_rotation(xyza, lon, lat, i, phase)
-
-                    # if inside the active region when scanning the grid
-                    if xyzi[0] ** 2 >= 1.0 - s**2:
-                        ar_grid[iy, iz] = True
-
-                        delta_quiet = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, cb1)
-                        # We have inhibition of convective blueshift on the spot, as such cb1=0
-                        delta_spot = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, 0)
-                        if magn_feature_type == 0:
-                            # intensity of the spot
-                            T_spot = temperature_spot(Tstar, Tdiff)
-                            intensity = planck_law(wlll, T_spot) / planck_star
-                        else:
-                            # plages are brighter on the limb (e.g. Meunier 2010)
-                            T_plage = temperature_plage(Tstar, Tdiff, r_cos)
-                            intensity = planck_law(wlll, T_plage) / planck_star
-
-                        shifted_quiet = linear_interpolator(
-                            rv, ccf, rv_vrot - delta_quiet
-                        )
-                        shifted_spot = linear_interpolator(
-                            rv, ccf_spot, rv_vrot - delta_spot
-                        )
-
-                        f_spot_flux += shifted_quiet * limb * (1.0 - intensity)
-                        f_spot_bconv += (shifted_quiet - shifted_spot) * limb
-                        f_spot_tot += (shifted_quiet - intensity * shifted_spot) * limb
-
-    return f_spot_bconv, f_spot_flux, f_spot_tot
+    return sum_ar
 
 
 @numba.njit(cache=True, nopython=True)
-def spot_scan_spectrum(
+def ar_scan_spectrum(
     v_eq,
     i,
-    u1,
-    u2,
+    coeffs,
+    law,
     alphaB,
     alphaC,
     cb1,
     grid,
     pixel,
-    pixel_spot,
+    pixel_ar,
     s,
     lon,
     lat,
@@ -1065,6 +978,8 @@ def spot_scan_spectrum(
     imaxy,
     imaxz,
     magn_feature_type,
+    feature_coeffs,
+    feature_law,
     Tstar,
     Tdiff,
     wlll,
@@ -1084,12 +999,12 @@ def spot_scan_spectrum(
     ir,
 ):
     """
-    Scan of the yz-area where the spot is.
-    For each grid point (y,z) we need to check whether it belongs to the spot
-    or not. Sadly, we do not know the projected geometry of the spot in its
+    Scan of the yz-area where the active region is.
+    For each grid point (y,z) we need to check whether it belongs to the active region
+    or not. Sadly, we do not know the projected geometry of the active region in its
     actual position. Thus, we have to do an inverse rotation to replace the
-    grid powhere it would be in the initial configuration. Indeed, in the
-    initial configuration, the spot has a well known geometry of a circle
+    grid point where it would be in the initial configuration. Indeed, in the
+    initial configuration, the active region has a well known geometry of a circle
     centered on the x-axis.
     """
 
@@ -1113,9 +1028,9 @@ def spot_scan_spectrum(
     xyza = np.empty(3)
     xyzi = np.empty(3)
 
-    f_spot_bconv = np.zeros_like(pixel.wave, dtype=np.float64)
-    f_spot_flux = np.zeros_like(pixel.wave, dtype=np.float64)
-    f_spot_tot = np.zeros_like(pixel.wave, dtype=np.float64)
+    f_ar_bconv = np.zeros_like(pixel.wave, dtype=np.float64)
+    f_ar_flux = np.zeros_like(pixel.wave, dtype=np.float64)
+    f_ar_tot = np.zeros_like(pixel.wave, dtype=np.float64)
 
     # Constant quantities
     costheta = cos(theta)
@@ -1138,7 +1053,7 @@ def spot_scan_spectrum(
             # projected radius on the sky smaller than 1: we are on the stellar
             # disc
             if z * z + y * y < 1.0:
-                r_cos, limb = ld(y, z, u1, u2)
+                r_cos, limb = ld(y, z, coeffs,law)
 
                 dp1 = y - xyzp[1]
                 dp2 = z - xyzp[2]
@@ -1170,16 +1085,18 @@ def spot_scan_spectrum(
                 ):
                     xyza = np.array([r_cos, y, z])
                     # xyza --> xyzi:
-                    # Rotate the star so that the spot is on the disc center
-                    xyzi = spot_inverse_rotation(xyza, lon, lat, i, phase)
+                    # Rotate the star so that the active region is on the disc center
+                    xyzi = ar_inverse_rotation(xyza, lon, lat, i, phase)
 
                     # if inside the active region when scanning the grid
                     if xyzi[0] ** 2 >= 1.0 - s**2:
+                        _,limb_feature= ld(y,z, feature_coeffs, feature_law)
+
                         ar_grid[iy, iz] = True
 
                         delta_quiet = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, cb1)
-                        # We have inhibition of convective blueshift on the spot, as such cb1=0
-                        delta_spot = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, 0)
+                        # We have inhibition of convective blueshift on the active region, as such cb1=0
+                        delta_ar = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, 0)
                         if magn_feature_type == 0:
                             # intensity of the spot
                             T_spot = temperature_spot(Tstar, Tdiff)
@@ -1192,15 +1109,15 @@ def spot_scan_spectrum(
                         shifted_quiet = doppler_shift(
                             pixel.wave, pixel.flux(r_cos), delta_quiet * 1e3
                         )
-                        shifted_spot = doppler_shift(
-                            pixel.wave, pixel_spot.flux(r_cos), delta_spot * 1e3
+                        shifted_ar = doppler_shift(
+                            pixel.wave, pixel_ar.flux(r_cos), delta_ar * 1e3
                         )
 
-                        f_spot_flux += shifted_quiet * limb * (1.0 - intensity)
-                        f_spot_bconv += (shifted_quiet - shifted_spot) * limb
-                        f_spot_tot += (shifted_quiet - intensity * shifted_spot) * limb
+                        f_ar_flux += shifted_quiet*(limb-limb_feature*intensity) 
+                        f_ar_bconv += shifted_quiet*limb-shifted_ar*limb_feature
+                        f_ar_tot += shifted_quiet*limb-intensity*limb_feature*shifted_ar
 
-    return f_spot_bconv, f_spot_flux, f_spot_tot
+    return f_ar_bconv, f_ar_flux, f_ar_tot
 
 
 # @numba.jit()
@@ -1209,7 +1126,7 @@ def active_region_contributions(
     star,
     active_regions,
     pixel,
-    pixel_spot,
+    pixel_ar,
     grid,
     nrho,
     wlll,
@@ -1226,17 +1143,12 @@ def active_region_contributions(
         pixel_flux = np.zeros((npsi, pixel.n_v))
         pixel_tot = np.zeros((npsi, pixel.n_v))
         pix_x, pix_y = pixel.rv, pixel.intensity
-        pix_y_spot = pixel_spot.intensity
+        ar_intensity = pixel_ar.intensity
     else:
         pixel_bconv = np.zeros((npsi, pixel.n))
         pixel_flux = np.zeros((npsi, pixel.n))
         pixel_tot = np.zeros((npsi, pixel.n))
-        # pix_x, pix_y = pixel.wave, pixel.flux
-        # pix_y_spot = pixel_spot.flux
-    # import matplotlib.pyplot as plt
-    # plt.plot(pix_x,pix_y)
-    # plt.plot(pix_x,pix_y_spot)
-    # plt.show()
+
 
     # from tqdm import tqdm
     for j in range(npsi):
@@ -1249,22 +1161,24 @@ def active_region_contributions(
         for ar in active_regions:
             if not ar.check:
                 continue
+            if ar.coeffs is None and ar.law is None:
+                ar_coeffs =  star.coeffs
+                ar_law    =  star.law
+            elif ar.coeffs is None or ar.law is None:
+                raise ValueError("Active region limb-darkening law and coefficients should be provided together")
+            else:
+                ar_coeffs = ar.coeffs
+                ar_law    = ar.law
 
-            # if isinstance(active_region.size, float):
-            #     sizes = active_region.size * np.ones_like(psi)
-            # elif callable(active_region.size):
-            #     sizes = active_region.size(psi * star.prot)
-            # else:
-            #     sizes = np.atleast_1d(active_region.size)
 
-            xyz = spot_init(ar.size, ar.lon, ar.lat, star.incl, nrho)
-            xyz2 = spot_phase(xyz, star.incl, psi[j])
-            vis, iminy, iminz, imaxy, imaxz = spot_area(xyz2, nrho, grid)
+            xyz = ar_init(ar.size, ar.lon, ar.lat, star.incl, nrho)
+            xyz2 = ar_phase(xyz, star.incl, psi[j])
+            vis, iminy, iminz, imaxy, imaxz = ar_area(xyz2, nrho, grid)
             if vis:
-                S = spot_scan_flux(
+                S = ar_scan_flux(
                     star.incl,
-                    star.u1,
-                    star.u2,
+                    star.coeffs,
+                    star.law,
                     grid,
                     ar.size,
                     ar.lon,
@@ -1275,6 +1189,8 @@ def active_region_contributions(
                     imaxy,
                     imaxz,
                     ar.active_region_type,
+                    ar_coeffs,
+                    ar_law,
                     star.teff,
                     ar.temp_diff,
                     wlll,
@@ -1300,18 +1216,18 @@ def active_region_contributions(
                     continue
 
                 if ccf:
-                    bconv, flux, tot = spot_scan_rv(
+                    bconv, flux, tot = ar_scan_rv(
                         star.vrot,
                         star.incl,
-                        star.u1,
-                        star.u2,
+                        star.coeffs,
+                        star.law,
                         star.diffrotB,
                         star.diffrotC,
                         star.cb1,
                         grid,
                         pix_x,
                         pix_y,
-                        pix_y_spot,
+                        ar_intensity,
                         pixel.v_interval,
                         pixel.n_v,
                         ar.size,
@@ -1323,6 +1239,8 @@ def active_region_contributions(
                         imaxy,
                         imaxz,
                         ar.active_region_type,
+                        ar_coeffs,
+                        ar_law,
                         star.teff,
                         ar.temp_diff,
                         wlll,
@@ -1342,17 +1260,17 @@ def active_region_contributions(
                         ring.ir,
                     )
                 else:
-                    bconv, flux, tot = spot_scan_spectrum(
+                    bconv, flux, tot = ar_scan_spectrum(
                         star.vrot,
                         star.incl,
-                        star.u1,
-                        star.u2,
+                        star.coeffs,
+                        star.law,
                         star.diffrotB,
                         star.diffrotC,
                         star.cb1,
                         grid,
                         pixel,
-                        pixel_spot,
+                        pixel_ar,
                         ar.size,
                         ar.lon,
                         ar.lat,
@@ -1362,6 +1280,8 @@ def active_region_contributions(
                         imaxy,
                         imaxz,
                         ar.active_region_type,
+                        ar_coeffs,
+                        ar_law,
                         star.teff,
                         ar.temp_diff,
                         wlll,
@@ -1523,7 +1443,7 @@ def planet_position_at_date(t, P, t0, e, w, ip, a, lbda):
 
 
 @numba.njit(cache=True)
-def spot_area(xyz, nrho, grid):
+def ar_area(xyz, nrho, grid):
     """
     Determine a smaller yz-area of the stellar disk where the active region is
     The different cases are:
@@ -1730,12 +1650,11 @@ def planet_scan_rv(
 def planet_scan_spectrum(
     v: float64,
     i: float64,
-    limba1: float64,
-    limba2: float64,
+    coeffs: numba.float64[:],
+    law: int,
     grid: int,
     wave: np.ndarray,
     pixel,
-    v_interval: float64,
     n_v: int,
     N: int,
     iminy: int,
@@ -1759,10 +1678,8 @@ def planet_scan_spectrum(
     # or not.
 
     delta_grid = 2.0 / grid
-    delta_v = 2.0 * v_interval / n_v  # vv
 
     f_planet = np.zeros(len(wave) + 1)
-    ccf_shifted = np.zeros(N)
 
     sum_planet = 0
 
@@ -1810,20 +1727,16 @@ def planet_scan_spectrum(
                 )
                 or (xdp1**2.0 + xdp2**2.0) <= Rp2
             ) and (y**2.0 + z**2.0) <= 1:
-                r_cos, limb = ld(y, z, limba1, limba2)
+                r_cos, limb = ld(y, z,coeffs,law)
                 sum_planet += limb
 
                 if calc_rv == 1:
 
                     latitude = z * sin(i) + r_cos * cos(i)
                     delta = vrot(v, r_cos, y, z, alphaB, alphaC, i, cb1)
-                    # Carefull!! Check the shift definition. This may be important for the spots also!
-                    #shifted_quiet = doppler_shift(wave, flux, delta * 1e3)
                     shifted_quiet = doppler_shift(
                             pixel.wave, pixel.flux(r_cos), delta* 1e3)
-                    # check this later
                     f_planet += shifted_quiet * limb
-    # join the flux result for a more efficient output
     f_planet[-1] = sum_planet
     return f_planet
 
@@ -1850,8 +1763,8 @@ def planet_scan_ndate(v, i, date , ndate, limba1, limba2,
                 flux_planet[idate]=planet_scan_rv(v, i, limba1, limba2, grid, vrad_ccf,pixel, 
                         v_interval, n_v, n, out[1], out[2], out[3], out[4], xyz[1], xyz[2], Rp, fe, fi, theta, ir, calc_rv, alphaB, alphaC,cb1)
             elif pixel_type == 'spectrum':
-                flux_planet[idate]=planet_scan_spectrum(v, i, limba1, limba2, grid, vrad_ccf,pixel, 
-                        v_interval, n_v, n, out[1], out[2], out[3], out[4], xyz[1], xyz[2], Rp, fe, fi, theta, ir, calc_rv, alphaB, alphaC, cb1)
+                flux_planet[idate]=planet_scan_spectrum(v, i, limba1, limba2, grid, vrad_ccf,pixel,
+                                                        n_v, n, out[1], out[2], out[3], out[4], xyz[1], xyz[2], Rp, fe, fi, theta, ir, calc_rv, alphaB, alphaC, cb1)
             else:
                 raise RuntimeError("Pixel type not supported. Choose between ccf and spectrum")
         else:
@@ -1861,46 +1774,40 @@ def planet_scan_ndate(v, i, date , ndate, limba1, limba2,
 
     return flux, sum_planet, xyz2
 
-
 def precompile_functions():
-    # from .classes import solarFTS
-    # spot_scan_spectrum(
-    #     1,
-    #     90,
-    #     0,
-    #     0,
-    #     0,
-    #     0,
-    #     0,
-    #     2,
-    #     solarFTS().to_numba(),
-    #     solarFTS().to_numba(),
-    #     0.1,
-    #     0,
-    #     0,
-    #     0,
-    #     0,
-    #     0,
-    #     0,
-    #     0,
-    #     0,
-    #     5000,
-    #     0,
-    #     3000,
-    #     np.zeros((2 + 1, 2 + 1), dtype=bool),
-    #     10,
-    #     0,
-    #     1,
-    #     0,
-    #     0,
-    #     90,
-    #     90,
-    #     5,
-    #     0,
-    #     1,
-    #     1,
-    #     90,
-    #     90,
-    # )
-    # itot_spectrum_par(1, 90, 0, 0, 0, 0, 0, 2, solarFTS().to_numba())
-    return None
+    print("Warming up JIT-compiled functions...")
+    # Dummy inputs
+    wave = np.linspace(5000e-10, 5010e-10, 2, dtype=np.float64)
+    flux = np.ones(2, dtype=np.float64)
+    coeffs = np.array([0.29, 0.34])
+    rv_arr = np.linspace(-20.0, 20.0, 81, dtype=np.float64)
+    ccf_arr = np.ones(81, dtype=np.float64)
+    grid = np.int32(2)
+    ar_grid = np.zeros((grid, grid), dtype=np.bool_)
+
+    # Warm up simple functions
+    planck_law(5000e-10, 5778.0)
+    ld(0.1, 0.1, coeffs, 1)
+    linear_interpolator(wave, flux, wave)
+    doppler_shift_wave(wave, 1.0)
+    doppler_shift(wave, flux, 1.0)
+    vrot(2.0, 0.9, 0.1, 0.1, 0.0, 0.0, np.pi / 2, 0.0)
+    itot_flux(coeffs, 1, grid)
+
+    # Warm up itot_rv
+    itot_rv(
+        2.0, 90.0, coeffs, 1, 0.0, 0.0, 0.0,
+        grid, rv_arr, ccf_arr, 20.0, np.int32(len(rv_arr))
+    )
+
+    # Warm up ar_init / ar_phase / ar_area
+    xyz = ar_init(0.1, 0.0, 0.0, 90.0, 10)
+    xyz2 = ar_phase(xyz, 90.0, 0.0)
+    ar_area(xyz2, 10, grid)
+
+    # Warm up ar_inverse_rotation
+    ar_inverse_rotation(np.array([0.9, 0.1, 0.1]), 0.0, 0.0, 90.0, 0.0)
+
+    # Warm up planet functions
+    planet_position_at_date(0.0, 10.0, 0.0, 0.0, 90.0, 90.0, 0.05, 90.0)
+    planet_area(np.array([0.0, 0.05, 0.0]), grid, 0.1, 1.0)

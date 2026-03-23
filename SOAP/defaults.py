@@ -11,8 +11,9 @@ _default_STAR = Star(
     incl=90.0,
     diffrotB=0.0,
     diffrotC=0.0,
-    u1=0.29,
-    u2=0.34,
+    cb1=0.0,
+    coeffs=[0.29, 0.34],
+    law=1,
     start_psi=0.0,
     radius=1.0,
     mass=1.0,
@@ -56,7 +57,9 @@ active_region = ActiveRegion(
     lat=30.0,
     size=0.1,
     active_region_type=0,
-    temp_diff=663,  # in K, this is the default value
+    temp_diff=663,  # in K, this is the default value,
+    coeffs=None,
+    law=None
 )
 
 # active_region.calc_maps(_default_STAR, 300, 20)

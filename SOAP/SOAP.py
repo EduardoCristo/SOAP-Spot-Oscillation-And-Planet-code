@@ -33,7 +33,6 @@ from .defaults import (
     _default_psi,
     _default_STAR,
 )
-from .fast_starspot import precompile_functions
 from .gaussian import (
     _precompile_gauss,
     compute_rv,
@@ -247,7 +246,7 @@ class Simulation:
             The planet to be simulated. Defaults to a template planet if not provided.
         pixel (SOAP.CCF or SOAP.Spectrum): 
             The CCF or spectrum for each pixel in the quiet star. Defaults to solar CCF.
-        pixel_spot (SOAP.CCF or SOAP.Spectrum): 
+        pixel_ar (SOAP.CCF or SOAP.Spectrum): 
             The CCF or spectrum for the spot(s). Defaults to solar spot CCF.
         active_regions (list of SOAP.ActiveRegion): 
             List of active regions to include in the simulation.
@@ -264,7 +263,7 @@ class Simulation:
         resample_spectra (int): 
             Resample the quiet star and spot spectra by this amount. No effect if using a CCF.
         interp_strategy (str): 
-            Strategy for interpolating pixel and pixel_spot to a common wavelength array.
+            Strategy for interpolating pixel and pixel_ar to a common wavelength array.
         verbose (bool): 
             If True, prints additional information during simulation.
     
@@ -273,8 +272,8 @@ class Simulation:
             Compute RV, FWHM, and BIS for a sequence of CCFs.
         set(**kwargs):
             Set multiple attributes of the simulation at once.
-        set_pixel(pixel, pixel_spot=None, pixel_plage=None):
-            Set the pixel, pixel_spot, and optionally pixel_plage for the simulation.
+        set_pixel(pixel, pixel_ar=None, pixel_plage=None):
+            Set the pixel, pixel_ar, and optionally pixel_plage for the simulation.
         plot(psi=None, **kwargs):
             Plot the simulation results.
         visualize(output, plot_type, lim=None, ref_wave=0, plot_lims=None, show_data=True):
@@ -305,7 +304,7 @@ class Simulation:
         star=None,
         planet=None,
         pixel="CCF",
-        pixel_spot="CCF",
+        pixel_ar="CCF",
         active_regions=None,
         ring=None,
         nrho=20,
@@ -326,33 +325,33 @@ class Simulation:
         else:
             self.pixel = deepcopy(pixel)
 
-        if pixel_spot == "CCF":
-            self.pixel_spot = deepcopy(_default_CCF_active_region)
-        elif pixel_spot == None:
-            self.pixel_spot = None
+        if pixel_ar == "CCF":
+            self.pixel_ar = deepcopy(_default_CCF_active_region)
+        elif pixel_ar == None:
+            self.pixel_ar = None
         else:
-            self.pixel_spot = deepcopy(pixel_spot)
+            self.pixel_ar = deepcopy(pixel_ar)
 
         _possible = (classes.CCF, classes.Spectrum)
         if not issubclass(self.pixel.__class__, _possible):
             raise ValueError("`pixel` can only be a CCF or a Spectrum")
-        if pixel_spot:
-            if not issubclass(self.pixel_spot.__class__, _possible):
-                raise ValueError("`pixel_spot` can only be a CCF or a Spectrum")
+        if pixel_ar:
+            if not issubclass(self.pixel_ar.__class__, _possible):
+                raise ValueError("`pixel_ar` can only be a CCF or a Spectrum")
 
             # Test if the spectrum size of the active region and spot are the same. If not it can follow two strategies:
             # - spot2quiet: Interpolate the spot spectrum to match the quiet spectrum size
             # - quet2spot : Interpolate the quiet spectrum to match the spot spectrum size
             if not self._ccf_mode:
-                if self.pixel.n != self.pixel_spot.n:
+                if self.pixel.n != self.pixel_ar.n:
                     if interp_strategy == "spot2quiet":
-                        self.pixel_spot.interpolate_to(self.pixel.wave, inplace=True)
+                        self.pixel_ar.interpolate_to(self.pixel.wave, inplace=True)
                     elif interp_strategy == "quiet2spot":
-                        self.pixel.interpolate_to(self.pixel_spot.wave, inplace=True)
+                        self.pixel.interpolate_to(self.pixel_ar.wave, inplace=True)
                 if verbose:
                     print(f"convolving spot spectra to R={inst_reso}")
-                self.pixel_spot.convolve_to(inst_reso, inplace=True)
-                self.pixel_spot.resample(resample_spectra, inplace=True)
+                self.pixel_ar.convolve_to(inst_reso, inplace=True)
+                self.pixel_ar.resample(resample_spectra, inplace=True)
 
                 # convolve the quiet and spot spectra to the instrument resolution
                 if verbose:
@@ -395,7 +394,7 @@ class Simulation:
 
         # connect pixels with the star
         self.star._pixel = self.pixel
-        self.star._pixel_spot = self.pixel_spot
+        self.star._pixel_ar = self.pixel_ar
 
         # convert star's vrot to the same units as the pixel
         self.star.set_vrot_units(self.pixel._rv_units)
@@ -475,13 +474,13 @@ class Simulation:
             except AttributeError:
                 print(f'attribute "{k}" does not exist')
 
-    def set_pixel(self, pixel, pixel_spot=None, pixel_plage=None):
+    def set_pixel(self, pixel, pixel_ar=None, pixel_plage=None):
         """Set this simulation's pixel
 
         Args:
             pixel (SOAP.CCF or SOAP.Spectrum):
                 The CCF or spectrum for each pixel in the quiet star
-            pixel_spot (SOAP.CCF or SOAP.Spectrum):
+            pixel_ar (SOAP.CCF or SOAP.Spectrum):
                 The CCF for the spots
             pixel_plage (SOAP.CCF or SOAP.Spectrum):
                 The CCF for the plages
@@ -489,8 +488,8 @@ class Simulation:
         pixel.vrot = self.star.vrot
         self.pixel = pixel
 
-        if pixel_spot is not None:
-            self.pixel_spot = copy(pixel_spot)
+        if pixel_ar is not None:
+            self.pixel_ar = copy(pixel_ar)
         if pixel_plage is not None:
             raise NotImplementedError("spots and plages use the same pixel")
 
@@ -498,7 +497,7 @@ class Simulation:
         self.itot_cached = False
         # connect CCFs with the star
         self.star._pixel = self.pixel
-        self.star._pixel_spot = self.pixel_spot
+        self.star._pixel_ar = self.pixel_ar
 
     def plot(self, psi=None, **kwargs):
         fig, axs, ani = plots.plot_simulation(self, psi=psi, **kwargs)
@@ -556,13 +555,13 @@ class Simulation:
             pixel = without_units(self.pixel)
             if skip_rv:
                 pixel_quiet = np.zeros(pixel.n_v)
-                flux_quiet = stspnumba.itot_flux(star.u1, star.u2, self.grid)
+                flux_quiet = stspnumba.itot_flux(star.coeffs, star.law, self.grid)
             else:
                 pixel_quiet, flux_quiet = stspnumba.itot_rv(
                     star.vrot,
                     star.incl,
-                    star.u1,
-                    star.u2,
+                    star.coeffs,
+                    star.law,
                     self.star.diffrotB,
                     self.star.diffrotC,
                     self.star.cb1,
@@ -574,15 +573,14 @@ class Simulation:
                 )
 
         else:
-            precompile_functions()
             pixel = self.pixel.to_numba()
             # pixel = without_units(self.pixel)
-            flux_quiet = stspnumba.itot_flux(star.u1, star.u2, self.grid)
+            flux_quiet = stspnumba.itot_flux(star.coeffs, star.law, self.grid)
             pixel_quiet = stspnumba.itot_spectrum_par(
                 star.vrot,
                 star.incl,
-                star.u1,
-                star.u2,
+                star.coeffs,
+                star.law,
                 self.star.diffrotB,
                 self.star.diffrotC,
                 self.star.cb1,
@@ -675,23 +673,23 @@ class Simulation:
         if DEBUG:
             None
             # print("Active region pixel")
-            # plt.plot(self.pixel_spot.wave, self.pixel_spot.flux )
+            # plt.plot(self.pixel_ar.wave, self.pixel_ar.flux )
             # plt.xlabel("Wavelength")
             # plt.ylabel("Flux")
             # plt.show()
         if self._ccf_mode:
             pixel = without_units(self.pixel)
-            if self.pixel_spot:
-                pixel_spot = without_units(self.pixel_spot)
+            if self.pixel_ar:
+                pixel_ar = without_units(self.pixel_ar)
         else:
             pixel = self.pixel.to_numba()
-            if self.pixel_spot:
-                pixel_spot = self.pixel_spot.to_numba()
+            if self.pixel_ar:
+                pixel_ar = self.pixel_ar.to_numba()
         if DEBUG:
             import matplotlib.pyplot as plt
 
             plt.plot(pixel.rv, pixel.intensity)
-            plt.plot(pixel_spot.rv, pixel_spot.intensity)
+            plt.plot(pixel_ar.rv, pixel_ar.intensity)
             plt.show()
         if len(active_regions) != 0:
             out = stspnumba.active_region_contributions(
@@ -699,7 +697,7 @@ class Simulation:
                 star,
                 active_regions,
                 pixel,
-                pixel_spot,
+                pixel_ar,
                 self.grid,
                 self.nrho,
                 self.wlll,
@@ -713,31 +711,31 @@ class Simulation:
                 try:
                     plt.plot(flux_spot)
                     plt.show()
-                    plt.plot(pixel_spot_flux.T)
+                    plt.plot(pixel_ar_flux.T)
                     plt.show()
                 except:
                     None
 
-            pixel_spot_bconv = out[1]
-            pixel_spot_flux = out[2]
+            pixel_ar_bconv = out[1]
+            pixel_ar_flux = out[2]
 
-            pixel_spot_tot = out[3]
+            pixel_ar_tot = out[3]
             # total flux of the star affected by active regions
             FLUXstar = FLUXstar - flux_spot
             # plt.plot(FLUXstar)
             # plt.show()
             # CCF of the star affected by the flux effect of active regions
-            pixel_flux = pixel_flux - pixel_spot_flux
+            pixel_flux = pixel_flux - pixel_ar_flux
             # CCF of the star affected by the convective blueshift effect of
             # active regions
-            pixel_bconv = pixel_bconv - pixel_spot_bconv
+            pixel_bconv = pixel_bconv - pixel_ar_bconv
             # CCF of the star affected by the total effect of active regions
-            pixel_tot = pixel_tot - pixel_spot_tot
+            pixel_tot = pixel_tot - pixel_ar_tot
             if DEBUG:
                 if skip_rv == False:
                     plt.close()
                     print("Effect of the spot in the spectra")
-                    plt.plot(pixel_spot_tot.T / np.max(pixel_spot_tot, axis=1))
+                    plt.plot(pixel_ar_tot.T / np.max(pixel_ar_tot, axis=1))
                     plt.plot(pixel_tot.T / np.max(pixel_tot, axis=1), "--")
                     plt.show()
                 else:
@@ -762,8 +760,8 @@ class Simulation:
                     star.incl,
                     date,
                     date.size,
-                    star.u1,
-                    star.u2,
+                    star.coeffs,
+                    star.law,
                     self.grid,
                     pixel.wave,
                     self.pixel.to_numba(),
@@ -803,8 +801,8 @@ class Simulation:
                     star.incl,
                     date,
                     date.size,
-                    star.u1,
-                    star.u2,
+                    star.coeffs,
+                    star.law,
                     self.grid,
                     pixel.rv,
                     pixel.intensity,
@@ -905,7 +903,7 @@ class Simulation:
                 fwhm_flux, span_flux = 0.0, 0.0
                 rv_bconv = compute_rv_2d(_rv, pixel_bconv)
                 fwhm_bconv, span_bconv = 0.0, 0.0
-                rv_tot = compute_rv_2d(_rv, pixel_bconv)
+                rv_tot = compute_rv_2d(_rv, pixel_tot)
                 fwhm_tot, span_tot = 0.0, 0.0
             elif skip_bis:
                 rv_flux, fwhm_flux = compute_rv_fwhm_2d(_rv, pixel_flux).T
@@ -954,7 +952,6 @@ class Simulation:
                 )
 
             if DEBUG:
-                print("I am in line 965")
                 plt.plot(_rv, ccf_pixel_flux.T)
                 plt.show()
 

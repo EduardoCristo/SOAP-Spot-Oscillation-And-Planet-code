@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .fast_starspot import spot_init, spot_phase
+from .fast_starspot import ar_init, ar_phase
 from .units import without_units
 
 try:
@@ -32,8 +32,8 @@ def plot_simulation(sim, psi=None):
         fig, axs = plt.subplot_mosaic(layout, constrained_layout=True)
 
     sim.pixel.plot(ax=axs["ccf"], color="k")
-    if sim.pixel_spot:
-        sim.pixel_spot.plot(ax=axs["ar_ccf"], color="C1")
+    if sim.pixel_ar:
+        sim.pixel_ar.plot(ax=axs["ar_ccf"], color="C1")
         axs["ar_ccf"].set_title("spot", loc="right")
     axs["ar_ccf"].sharex(axs["ccf"])
     axs["ar_ccf"].sharey(axs["ccf"])
@@ -71,9 +71,9 @@ def plot_simulation(sim, psi=None):
             elif ar.type == "plage":
                 color = "m"
 
-            xyz = spot_init(ar.size, ar.lon + ax.azim, ar.lat, sim.star.incl, sim.nrho)
+            xyz = ar_init(ar.size, ar.lon + ax.azim, ar.lat, sim.star.incl, sim.nrho)
             if φ != 0:
-                xyz = spot_phase(xyz, sim.star.incl, φ)
+                xyz = ar_phase(xyz, sim.star.incl, φ)
             xyz = xyz.T
             vis = xyz[0] > 0
             (line,) = ax.plot(xyz[0][vis], xyz[1][vis], xyz[2][vis], color=color)

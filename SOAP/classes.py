@@ -1,3 +1,4 @@
+from inspect import Arguments
 import os
 import uuid
 from glob import glob
@@ -32,6 +33,24 @@ def set_object_attributes(object, attrs):
         except AttributeError:
             print(f'attribute "{k}" does not exist')
 
+# Number of coefficients required per law
+_LD_LAW_NCOEFFS = {
+    0: 1,  # linear
+    1: 2,  # quadratic
+    2: 2,  # square root
+    3: 2,  # logarithmic
+    4: 2,  # exponential
+    5: 4,  # Claret non-linear
+}
+
+_LD_LAW_NAMES = {
+    0: "linear",
+    1: "quadratic",
+    2: "square root",
+    3: "logarithmic",
+    4: "exponential",
+    5: "Claret non-linear",
+}
 
 class Star:
     """
@@ -49,10 +68,10 @@ class Star:
             Coefficient for latitudinal differential rotation (sin^4 term).
         cb1 (float, optional):
             Absolute value of the convective blueshift (m/s).
-        u1 (float, optional):
-            Linear coefficient of the quadratic limb-darkening law.
-        u2 (float, optional):
-            Quadratic coefficient of the quadratic limb-darkening law.
+        coeffs (array-like, optional):
+            Coefficient(s) of the limb-darkening law.
+        law (int, optional):
+            Limb-darkening law type. Can be 0 for linear, 1 for quadratic, 2 for square root, 3 for logarithmic, 4 for exponential, 5 for Claret's non-linear law.
         radius (float, optional):
             Stellar radius [R_sun].
         mass (float, optional):
@@ -61,6 +80,19 @@ class Star:
             Effective temperature of the star [K].
         start_psi (float, optional):
             Starting phase [in units of rotation period].
+    
+    Properties:
+        vrot (astropy.Quantity):
+            Rotation velocity of the star at the equator, calculated from prot and radius.
+    
+    Methods:
+        set_vrot_units(units):
+            Set the units for the vrot property.
+        set(**kwargs):
+            Set attributes of the star, taking care of units and validating limb-darkening coefficients if law or coeffs are changed.
+    
+    Raises:
+        ValueError: If the number of limb-darkening coefficients does not match the selected law.
     """
 
     @maybe_quantity_input(
@@ -73,8 +105,8 @@ class Star:
         diffrotB=0,
         diffrotC=0,
         cb1=0,
-        u1=0.29,
-        u2=0.34,
+        coeffs=[0.29, 0.34],
+        law=1,
         radius=1,
         mass=1,
         teff=5778,
@@ -85,13 +117,52 @@ class Star:
         self.incl = incl
         self.diffrotB, self.diffrotC = diffrotB, diffrotC
         self.cb1 = cb1
-        self.u1, self.u2 = u1, u2
+        self.coeffs = coeffs
+        self.law = law
         self.start_psi = start_psi
         self.radius = radius
         self.mass = mass
         self.teff = teff
         # default units for vrot
         self._vrot_units = kms
+
+        self._validate_ld()  # ← validate at construction time
+
+    def _validate_ld(self):
+        """Check that coeffs length matches the selected limb-darkening law."""
+        if self.law not in _LD_LAW_NCOEFFS:
+            raise ValueError(
+                f"Unknown limb-darkening law: {self.law}. "
+                f"Valid laws are: {list(_LD_LAW_NCOEFFS.keys())}"
+            )
+        required = _LD_LAW_NCOEFFS[self.law]
+        given = len(self.coeffs)
+        if given != required:
+            raise ValueError(
+                f"Law {self.law} ({_LD_LAW_NAMES[self.law]}) requires "
+                f"{required} coefficient(s), but {given} were given: {self.coeffs}"
+            )
+
+    def __setattr__(self, name, value):
+        try:
+            old = getattr(self, name)
+            if has_unit(old):
+                super().__setattr__(name, value << old.unit)
+            else:
+                super().__setattr__(name, value)
+        except AttributeError:
+            super().__setattr__(name, value)
+        # Re-validate whenever law or coeffs changes after construction
+        if name in ("law", "coeffs"):
+            try:
+                self._validate_ld()
+            except AttributeError:
+                pass  # coeffs or law not yet set during __init__
+        # try to update self.vrot
+        try:
+            _ = self.vrot
+        except AttributeError:
+            pass
 
     def set_vrot_units(self, units):
         self._vrot_units = units
@@ -126,13 +197,16 @@ class Star:
     def __repr__(self):
         pars = (
             f"prot={self.prot}; incl={self.incl}; radius={self.radius}; "
-            f"teff={self.teff:.0f}"
+            f"mass={self.mass}; teff={self.teff:.0f}; diffrotB={self.diffrotB}; "
+            f"diffrotC={self.diffrotC}; cb1={self.cb1}; law={self.law, _LD_LAW_NAMES[self.law]}; "
+            f"coeffs={self.coeffs}; start_psi={self.start_psi}"
         )
         return "SOAP.Star(%s)" % pars
 
+
     def set(self, **kwargs):
         set_object_attributes(self, kwargs)
-
+        self._validate_ld()  # ← validate when setting attributes
 
 class ActiveRegion:
     """
@@ -145,6 +219,8 @@ class ActiveRegion:
         active_region_type (int): 0 for spot, 1 for plage.
         temp_diff (float or astropy.Quantity): Temperature difference [K].
         check (bool): Whether the region is active.
+        coeffs (array-like): Limb-darkening coefficients for the active region.
+        law (int): Limb-darkening law type for the active region.
 
     Methods:
         random(ARtype="spot"): Create a random active region of the specified type.
@@ -163,12 +239,14 @@ class ActiveRegion:
 
     @maybe_quantity_input(lon=U.deg, lat=U.deg, temp_diff=U.K)
     def __init__(
-        self, lon, lat, size, active_region_type=0, temp_diff=None, check=True
+        self, lon, lat, size, active_region_type=0, temp_diff=None, check=True,coeffs=None,law=None
     ):
         self.lon = lon
         self.lat = lat
         self.size = size
         self.check = check
+        self.coeffs=coeffs
+        self.law=law
 
         if active_region_type in (0, 1):
             self.active_region_type = active_region_type
@@ -257,18 +335,17 @@ class ActiveRegion:
 class Ring:
     """Ring of the planet
 
-    Parameters
-    ----------
-    fi : float
-        Ring inner radius (must be >= 1)
-    fe : float
-        Ring outer radius (must be >= 1 and >= fi)
-    ir : float
-        Projected inclination of ring wrt to the skyplane [degrees].
-        90 for an edge-on ring, 0 for face on
-    theta : float
-        Projected ring tilt [degrees]. 90 means that the image of the ring in
-        perpendicular to the orbit in the plane of the sky.
+    Args:
+        fi (float):
+            Ring inner radius (must be >= 1)
+        fe (float):
+            Ring outer radius (must be >= 1 and >= fi)
+        ir (float):
+            Projected inclination of ring wrt to the skyplane [degrees].
+            90 for an edge-on ring, 0 for face on
+        theta (float):
+            Projected ring tilt [degrees]. 90 means that the image of the ring in
+            perpendicular to the orbit in the plane of the sky.
     """
 
     @maybe_quantity_input(ir=U.deg, theta=U.deg)
@@ -349,27 +426,19 @@ class Planet:
         """
         Add a ring to this planet.
 
-        Parameters
-        ----------
-        fi : float, optional [default: 1.0]
-            Ring inner radius
-        fe : float, optional [default: 1.0]
-            Ring outer radius
-        ir : float, optional [default: 0.0]
-            Projected inclination of ring wrt to the skyplane [degrees].
-            90 for an edge-on ring, 0 for face on
-        theta : float, optional [default: 0.0]
-            Projected ring tilt [degrees]. 90 means that the image of the ring in
-            perpendicular to the orbit in the plane of the sky.
+        Args:
+            fi (float, optional [default: 1.0]):
+                Ring inner radius
+            fe (float, optional [default: 1.0]):
+                Ring outer radius
+            ir (float, optional [default: 0.0]):
+                Projected inclination of ring wrt to the skyplane [degrees].
+                90 for an edge-on ring, 0 for face on
+            theta (float, optional [default: 0.0]):
+                Projected ring tilt [degrees]. 90 means that the image of the ring in
+                perpendicular to the orbit in the plane of the sky.
         """
-        # text = input('do you really wanna put a ring on it? ')
-        # if text == 'yes':
-        #     import webbrowser
-        #     webbrowser.open('https://youtu.be/4m1EFMoRFvY', new=2)
-        # if self.Rp == 0.0:
-        #     print('Adding ring to non-existent planet. Set planet.Rp > 0')
-        # if fi == fe:
-        #     print('Ring has inner radius = outer radius, will not have any effect')
+
         self.ring = Ring(fi, fe, ir, theta)
 
     def remove_ring(self):
@@ -445,43 +514,41 @@ class Planet:
 
 
 class CCF:
+    """
+    Initialize the CCF object.
+
+    Args:
+        rv (array-like):
+            Radial velocity array where the CCF is defined [km/s or astropy unit].
+        intensity (array-like):
+            CCF intensity array.
+        normalize (bool, optional):
+            If True, normalize the CCF by its median. Default is True.
+    convolved (bool, optional):
+        If True, indicates that the CCF is already convolved with the instrumental profile. Default is False.
+
+    Attributes:
+        rv (array-like):
+            Radial velocity array.
+        intensity (array-like):
+            Normalized or raw CCF intensity array.
+            Indicates if the CCF is convolved.
+        n (int):
+            Number of points in the CCF.
+        step (float):
+            Step size between consecutive RV points.
+        width (float):
+            Maximum absolute value of RV, representing the CCF width.
+        _rv_units (astropy.units.Unit):
+            Units of the RV array.
+        _vrot (astropy.units.Quantity):
+            Rotational velocity, initialized to zero.
+    """
     # is this a CCF?
     _ccf: bool = True
 
     @maybe_quantity_input(rv=kms)
     def __init__(self, rv, intensity, normalize=True, convolved=False):
-        """
-        Initialize the CCF object.
-
-        Parameters
-        ----------
-        rv : array-like
-            Radial velocity array where the CCF is defined [km/s or astropy unit].
-        intensity : array-like
-            CCF intensity array.
-        normalize : bool, optional
-            If True, normalize the CCF by its median. Default is True.
-        convolved : bool, optional
-            If True, indicates that the CCF is already convolved with the instrumental profile. Default is False.
-
-        Attributes
-        ----------
-        rv : array-like
-            Radial velocity array.
-        intensity : array-like
-            Normalized or raw CCF intensity array.
-            Indicates if the CCF is convolved.
-        n : int
-            Number of points in the CCF.
-        step : float
-            Step size between consecutive RV points.
-        width : float
-            Maximum absolute value of RV, representing the CCF width.
-        _rv_units : astropy.units.Unit
-            Units of the RV array.
-        _vrot : astropy.units.Quantity
-            Rotational velocity, initialized to zero.
-        """
 
         self.rv = rv
         if normalize:
@@ -548,19 +615,29 @@ class CCF:
 
 
 class solarCCF(CCF):
-    """Solar CCF obtained with the FTS spectrograph"""
+    """ Solar CCF obtained by cross-correlation with a G2 mask Pepe+2002, which spectra was obtained with the FTS spectrograph, for the quiet Sun (Wallace+1998) or a sunspot umbra(Wallace+1995).
+    Source: https://nso.edu/data/historical-archive/
+
+    Args:
+        vrot(float):
+            Rotation velocity of the star (used to select a wider CCF window)
+        active_region (bool, default False):
+            Get the CCF for the active region instead of the quiet Sun
+    Attributes:
+        rv (array-like):
+            Radial velocity array where the CCF is defined [km/s].
+        intensity (array-like):
+            CCF intensity array.
+        n (int):
+            Number of points in the CCF.
+        step (float):
+            Step size between consecutive RV points.
+        width (float):
+            Maximum absolute value of RV, representing the CCF width.
+    """
 
     @maybe_quantity_input(vrot=kms)
     def __init__(self, vrot, active_region=False):
-        """
-        Arguments
-        ---------
-        vrot : float
-            Rotation velocity of the star (used to select a wider CCF window)
-        active_region : bool, default False
-            Get the CCF for the active region instead of the quiet Sun
-        """
-
         this_dir = os.path.dirname(__file__)
         if vrot < 10 * kms:
             f = "CCF_solar_spectrum_G2_FTS_reso_not_evenly_sampled_in_freq.rdb"
@@ -700,6 +777,18 @@ class SpectrumNumbaInterpolated:
 
 
 class Spectrum:
+    """ 
+    A class representing a spectrum, with wavelength and flux arrays, and methods to manipulate them.
+
+    Args:
+        wave (array-like):
+            Wavelength array of the spectrum [Angstrom].
+        flux (array-like):
+            Flux array of the spectrum, same shape as wave.
+        step (float, optional):
+            Step size for the CCF, in km/s. Default is 0.5 km/s.
+
+    """
     # is this a CCF?
     _ccf: bool = False
 
@@ -872,6 +961,20 @@ class Spectrum:
 
 
 class solarFTS(Spectrum):
+    """
+    Solar spectrum obtained with the FTS spectrograph, for the quiet Sun (Wallace+1998) or a sunspot umbra(Wallace+1995).
+    Source: https://nso.edu/data/historical-archive/
+
+    Args:
+        spot (bool, optional):
+            If True, get the spectrum for a sunspot. If False, get the spectrum for the quiet Sun. Default is False.
+        wave_range (tuple of float, optional):
+            Wavelength range to get the spectrum, in Angstrom. Default is (3500, 7500).
+        resolution (float, optional):
+            If not None, convolve the spectrum to this resolution. Default is None (no convolution).
+        air_wave (bool, optional):
+            If True, convert the wavelengths from vacuum to air. Default is True.
+    """
 
     def __init__(
         self, spot=False, wave_range=(3500, 7500), resolution=None, air_wave=True
@@ -1015,14 +1118,33 @@ class solarIAGatlas(Spectrum):
 
 
 class PHOENIX(Spectrum):
-    # get wave and flux from PHOENIX
-
-    # mask = (wave > wave_range[0]) & (wave < wave_range[1])
-    # wave = wave[mask]
-    # flux = flux[mask]
+    """
+    A class representing a PHOENIX spectrum, with wavelength and flux arrays, and methods to manipulate them.
+    Args:
+        ar (bool, optional):
+            If True, get the spectrum for a spot (with a contrast in temperature). If False, get the spectrum for the quiet photosphere. Default is False.
+        wave_range (tuple of float, optional):
+            Wavelength range to get the spectrum, in Angstrom. Default is (3500, 7500).
+        resolution (float, optional):
+            If not None, convolve the spectrum to this resolution. Default is None (no convolution).
+        teff (float, optional):
+            Effective temperature of the star in Kelvin. Default is 5780 K (solar).
+        logg (float, optional):
+            Surface gravity of the star in cgs. Default is 4.4 (solar).
+        Z (float, optional):
+            Metallicity of the star. Default is 0.012 (solar).
+        St_alpha (float, optional):
+            Alpha element abundance of the star. Default is 0 (solar).
+        contrast (float, optional):
+            Temperature contrast of the spot in Kelvin. Default is 0 K (no contrast).
+        normalize (bool, optional):
+            If True, normalize the spectrum by fitting a linear continuum to the 10% highest flux points in the spectrum. Default is False.
+        cache (bool, optional):
+            If True, save the spectrum to a file and load it if the same parameters are used again. Default is True.
+    """
     def __init__(
         self,
-        spot=False,
+        ar=False,
         wave_range=(3500, 7500),
         resolution=None,
         teff=5780,
@@ -1044,7 +1166,7 @@ class PHOENIX(Spectrum):
                 and f.name.endswith("npz")
             ]
             prop_dict = {
-                "spot": spot,
+                "ar": ar,
                 "wave_range": wave_range,
                 "resolution": resolution,
                 "teff": teff,
@@ -1072,7 +1194,7 @@ class PHOENIX(Spectrum):
                         pass
         else:
             pass
-        if spot:
+        if ar:
             spectrum = get_spectrum(
                 T_eff=teff + contrast, log_g=logg, Z=Z, alpha=St_alpha
             )
@@ -1135,7 +1257,6 @@ class PHOENIX(Spectrum):
 
 from functools import partial
 
-from better_uniform import buniform as uniform
 from scipy.stats import lognorm, norm, truncnorm
 
 
@@ -1161,7 +1282,13 @@ class distribution_sum:
 class ActiveRegionEvolution:
     """
     This class holds information about the evolution of active regions over the
-    stellar magnitic cycle
+    stellar magnitic cycle.
+    
+    Args:
+        tref (float, optional):
+            Reference time for the active region evolution, in years. Default is 0.0.
+        isolated_spots_fraction (float, optional):
+            Fraction of active regions that are isolated spots (as opposed to groups of spots). Default is 0.4.
     """
 
     def __init__(self, tref=0.0, isolated_spots_fraction=0.4):

@@ -3,7 +3,7 @@ import numpy as np
 from better_uniform import buniform
 
 def get_all_parameters(sim):
-    star_pars = ['prot', 'incl', 'u1', 'u2']
+    star_pars = ['prot', 'incl', 'coeffs', 'law']
     ar_template_pars = ['lat', 'long', 'size']
     planet_pars = ['a', 'e', 'ip', 'lbda', 't0', 'w', 'Rp', 'Pp']
     ring_pars = ['fi', 'fe', 'ir', 'theta']

@@ -32,3 +32,6 @@ if __name__ == "__main__":
 
 __all__ = ["Simulation", "ActiveRegion", "CCF", "Star","Planet", "Ring", "Spec_mu", "PHOENIX",
            "gaussianCCF", "solarCCF", "solarFTS", "solarIAGatlas"]
+
+from .fast_starspot import precompile_functions
+precompile_functions()

@@ -6,29 +6,28 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize, TwoSlopeNorm
 from matplotlib.patches import Polygon
-from SOAP.fast_starspot import ld, spot_init, spot_phase,spot_area
+from SOAP.fast_starspot import ld, ar_init, ar_phase,ar_area
 from SOAP.utils import planet_gradient_2, star_gradient, star_gradient_flux,transgrad, transit_durations
 
 # Set font size for plots
 matplotlib.rc("font", size=16)
 
+def ld_masked(ys, zs, coeffs, law):
+    n = len(ys)
+    mu_out = np.empty(n)
+    I_out  = np.empty(n)
+    for i in range(n):
+        mu_out[i], I_out[i] = ld(ys[i], zs[i], coeffs, law)
+    return mu_out, I_out
 
 # Helper function to generate the planetary disk position
 def disk_position(sim, xyz, l, ys, zs):
     xl, yl, zl = xyz[l]
-    planet_arr = np.zeros((len(ys), len(zs)))
-    y_p = np.where(
-        (ys >= (yl - sim.planet.Rp.value)) & (ys <= (yl + sim.planet.Rp.value))
-    )[0]
-    z_p = np.where(
-        (zs >= (-zl - sim.planet.Rp.value)) & (zs <= (-zl + sim.planet.Rp.value))
-    )[0]
-
-    for k in y_p:
-        for j in z_p:
-            if ((ys[k] - yl) ** 2 + (zs[j] + zl) ** 2 <= sim.planet.Rp.value**2) and ((ys[k] - yl) ** 2 + (zs[j] + zl) ** 2>= 0.8*sim.planet.Rp.value**2):
-                planet_arr[j, k] = 0.1
-
+    Rp = sim.planet.Rp.value
+    Y, Z = np.meshgrid(ys, zs)
+    dist2 = (Y - yl)**2 + (Z + zl)**2
+    ring = (dist2 <= Rp**2) & (dist2 >= 0.8 * Rp**2)
+    planet_arr = np.where(ring, 0.1, 0.0)
     return np.ma.masked_array(planet_arr, planet_arr < 0.1)
 
 def visualize(sim, out, plot_type, lim=None, ref_wave=None, plot_lims=None, show_data=True):
@@ -73,7 +72,7 @@ def visualize(sim, out, plot_type, lim=None, ref_wave=None, plot_lims=None, show
     delta = Y[mask] * delta_z * sin_i + (sim.star.cb1 / 1000) * r_cos
 
     val[mask] = delta
-    alpha[mask] = ld(Y[mask], Z[mask], sim.star.u1, sim.star.u2)[1]
+    alpha[mask] = ld_masked(Y[mask], Z[mask], np.array(sim.star.coeffs, dtype=np.float64), sim.star.law)[1]
 
     # Figure and axes (match relative sizes to animate)
     if show_data:
@@ -158,14 +157,14 @@ def visualize(sim, out, plot_type, lim=None, ref_wave=None, plot_lims=None, show
             # Use the first unmasked phase to position spots (static snapshot choice)
             for idx0 in sel:
                 for j in sim.active_regions:
-                    spot = spot_init(j.size, (j.lon).value, (j.lat).value, (sim.star.incl).value, 40)
-                    spot_phase_position = spot_phase(spot, (sim.star.incl).value, out.psi[idx0])
+                    spot = ar_init(j.size, (j.lon).value, (j.lat).value, (sim.star.incl).value, 40)
+                    ar_phase_position = ar_phase(spot, (sim.star.incl).value, out.psi[idx0])
                     if j.active_region_type == 0:
                         facecolor = "black"
                     else:
                         facecolor = "yellow"
                     polygon = Polygon(
-                        np.array([spot_phase_position[:, 1], spot_phase_position[:, 2]]).T,
+                        np.array([ar_phase_position[:, 1], ar_phase_position[:, 2]]).T,
                         closed=True,
                         facecolor=facecolor,
                     )
@@ -313,7 +312,7 @@ def animate_visualization(
 
     # Store delta and limb darkening
     val[mask] = delta
-    alpha[mask] = ld(Y[mask], Z[mask], sim.star.u1, sim.star.u2)[1]
+    alpha[mask] = ld_masked(Y[mask], Z[mask], np.array(sim.star.coeffs, dtype=np.float64), sim.star.law)[1]
     #####################################
 
 
@@ -419,7 +418,7 @@ def animate_visualization(
     spot_polys = []
     if len(sim.active_regions) != 0:
         for j in sim.active_regions:
-            spot = spot_init(j.size, (j.lon).value, (j.lat).value, (sim.star.incl).value, 40)
+            spot = ar_init(j.size, (j.lon).value, (j.lat).value, (sim.star.incl).value, 40)
             facecolor = "black" if j.active_region_type == 0 else "yellow"
             poly = Polygon(np.zeros((0, 2)), closed=True, facecolor=facecolor, visible=False)
             axs[0].add_patch(poly)
@@ -523,7 +522,7 @@ def animate_visualization(
 
         if len(spot_polys) != 0 and np.any(~phase_mask):
             for (poly, spot, active_region_type) in spot_polys:
-                spp = spot_phase(spot, (sim.star.incl).value, out.psi[sel[frame]])
+                spp = ar_phase(spot, (sim.star.incl).value, out.psi[sel[frame]])
                 vis=spp.T[0]>0
                 if vis.any():
                     poly.set_xy(np.array([spp[:, 1], spp[:, 2]]).T)
@@ -656,7 +655,7 @@ def plot_absorption_map(sim,psi, absorption_spec,λ,cmap=transgrad):
 
     # Normalize with center at zero for cyan-white-red style gradient
     norm = TwoSlopeNorm(vmin=np.min(absorption_spec), vcenter=0, vmax=np.max(absorption_spec))
-    im = ax.pcolor(X, Y, absorption_spec, cmap=cmap, norm=norm)
+    im = ax.pcolormesh(X, Y, absorption_spec, cmap=cmap, norm=norm, shading='auto')
 
     # Plot horizontal lines for transit durations in orbital phase
     ax.plot(λ, [-tr_dur/2, -tr_dur/2], '-k')

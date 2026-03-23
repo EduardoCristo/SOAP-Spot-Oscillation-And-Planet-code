@@ -5,30 +5,34 @@ repo_url: https://github.com/EduardoCristo/SOAP-Spot-Oscillation-And-Planet-code
 
 theme:
   name: material
+  logo: assets/SOAP_K.png
+  favicon: assets/SOAP_K.png   # also update the browser tab icon
   font:
-    text: Roboto
-    code: Roboto Mono
+    text: Inter
+    code: Fira Code
   palette:
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/weather-night
-        name: Switch to dark mode
     - scheme: slate
-      primary: indigo
-      accent: indigo
+      primary: blue
+      accent: light blue
+      toggle:
+        icon: material/telescope
+        name: Switch to light mode
+    - scheme: default
+      primary: blue
+      accent: light blue
       toggle:
         icon: material/weather-sunny
-        name: Switch to light mode
+        name: Switch to dark mode
   features:
-    - navigation.instant
-    - navigation.instant.prefetch
-    - navigation.path
-    - navigation.indexes 
-    - toc.integrate 
-    - content.code.copy
-    - content.code.select
+    - navigation.tabs          # top-level tabs instead of sidebar
+    - navigation.tabs.sticky   # tabs stay visible on scroll
+    - navigation.sections      # group nav into sections
+    - navigation.expand        # expand all nav by default
+    - navigation.top           # back-to-top button
+    - toc.integrate            # merge ToC into left sidebar
+    - toc.follow               # ToC auto-scrolls with page
+    - content.code.copy        # copy button on code blocks
+    - header.autohide          # hide header on scroll down
   
 markdown_extensions:
   - pymdownx.highlight:
@@ -55,7 +59,14 @@ nav:
       - Transit time-series AR crossing (RV + phot): notebooks/RV_phot_AR_crossing.ipynb
 
 
-  - API Reference: reference.md
+  - API Reference:
+    - api/simulation.md
+    - api/star.md
+    - api/planet.md
+    - api/ring.md
+    - api/active_region.md
+    - api/pixel_CCF.md
+    - api/pixel_spectrum.md
 
   - Contacts: contacts.md
   - Acknowledgements: Acknowledgements.md
@@ -66,7 +77,7 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
-          paths: [SOAP]
+          paths: [.]
           options:
             filters:
               - "!^_"
@@ -75,4 +86,4 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/EduardoCristo/SOAP-Spot-Oscillation-And-Planet-code
   footer:
-    copyright: "© 2025 Eduardo Cristo"
+    copyright: "©2026 Eduardo Cristo"

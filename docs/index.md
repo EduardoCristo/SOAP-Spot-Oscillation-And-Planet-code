@@ -1,4 +1,7 @@
 # Welcome to SOAP's Documentation!
+<p align="center">
+  <img src="assets/SOAP_K.png" alt="SOAP logo" width="320">
+</p>
 
 ## Introduction
 

@@ -289,7 +289,7 @@ def compute_rv_fwhm(rv: np.ndarray, ccf: np.ndarray):
         jacobian_gaussian,
         rv,
         ccf,
-        np.array([abs(np.max(ccf) - np.min(ccf)), 0, 3, np.max(ccf)]),
+        np.array([abs(np.max(ccf) - np.min(ccf)), rv[np.argmin(ccf)], 3, np.max(ccf)]),
     )
     # import matplotlib.pyplot as plt
     # plt.plot(rv,ccf,".k")
@@ -306,7 +306,7 @@ def compute_rv(rv: np.ndarray, ccf: np.ndarray):
         jacobian_gaussian,
         rv,
         ccf,
-        np.array([abs(np.max(ccf) - np.min(ccf)), 0, 3, np.max(ccf)]),
+        np.array([abs(np.max(ccf) - np.min(ccf)), rv[np.argmin(ccf)], 3, np.max(ccf)]),
     )
 
     return res[1]
@@ -319,7 +319,7 @@ def compute_rv_fwhm_bis(rv: np.ndarray, ccf: np.ndarray):
         jacobian_gaussian,
         rv,
         ccf,
-        np.array([np.min(ccf) - np.max(ccf), 0, 3, np.max(ccf)]),
+        np.array([np.min(ccf) - np.max(ccf), rv[np.argmin(ccf)], 3, np.max(ccf)]),
     )
     # import matplotlib.pyplot as plt
     # plt.plot(rv,ccf,".k")
@@ -327,4 +327,4 @@ def compute_rv_fwhm_bis(rv: np.ndarray, ccf: np.ndarray):
     # plt.plot(rv,gaussian(rv,np.array([np.min(ccf)-np.max(ccf),0, 3,np.max(ccf)])),".g")
     # plt.show()
     bis = BIS_HARPS(rv, ccf, res)
-    return res[1], 2 * np.sqrt(2 * np.log(2)) * res[2], bis
+    return res[1], 2 * np.sqrt(2 * np.log(2)) * res[2], -bis
