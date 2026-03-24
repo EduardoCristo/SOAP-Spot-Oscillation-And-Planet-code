@@ -54,6 +54,7 @@ nav:
   - Examples:
       - Stellar Activity Time-Series: notebooks/RV_phot_activity.ipynb
       - Transit & Absorption Time-Series: notebooks/Transit_time_series.ipynb
+      - Transit Local Profiles: notebooks/Doppler_shadow.ipynb
       - Spot-Crossing Transit & Absorption Time-Series: notebooks/Transit_time_spot_crossing.ipynb
       - Transit time-series (RV + phot): notebooks/RV_phot_transit.ipynb
       - Transit time-series AR crossing (RV + phot): notebooks/RV_phot_AR_crossing.ipynb
