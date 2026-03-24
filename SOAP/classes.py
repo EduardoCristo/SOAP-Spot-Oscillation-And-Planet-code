@@ -615,6 +615,7 @@ class CCF:
 
 
 class solarCCF(CCF):
+    
     """ Solar CCF obtained by cross-correlation with a G2 mask Pepe+2002, which spectra was obtained with the FTS spectrograph, for the quiet Sun (Wallace+1998) or a sunspot umbra(Wallace+1995).
     Source: https://nso.edu/data/historical-archive/
 

@@ -857,8 +857,6 @@ class Simulation:
             # out.rv=None by defaults
             out = output(psi=psi, flux=FLUXstar)
             return out
-        n1 = np.max(pixel_flux, axis=1)
-
         # normalization
         self.pixel_flux = pixel_flux = (pixel_flux.T / np.max(pixel_flux, axis=1)).T
         self.pixel_bconv = pixel_bconv = (pixel_bconv.T / np.max(pixel_bconv, axis=1)).T
@@ -1050,8 +1048,14 @@ class Simulation:
                     )
                 )
             )
-            try:
-                planet_phases = psi * self.star.prot / self.planet.P
+
+            # Check if the baseline can be properly estimated on both sides of the transit, otherwise skip
+            planet_phases = psi * self.star.prot / self.planet.P
+            before_transit = planet_phases < -tr_dur / 2
+            after_transit  = planet_phases >  tr_dur / 2
+
+            if (np.any(before_transit) and np.any(after_transit)):
+                
                 phase_mask = np.logical_or(
                     planet_phases < -tr_dur / 2, planet_phases > tr_dur / 2
                 )
@@ -1072,13 +1076,21 @@ class Simulation:
                     print("RVs obtained from a linear fit from the out-of-transit")
                     print(slope_rvs)
 
-                corr_pixel_flux = np.array(
-                    [
-                        stspnumba.doppler_shift(pixel.wave, pixel_tot[i], -slope_rvs[i])
-                        for i in range(len(pixel_tot))
-                    ]
-                )
+                if self._ccf_mode==False:
 
+                    corr_pixel_flux = np.array(
+                        [
+                            stspnumba.doppler_shift(pixel.wave, pixel_tot[i], -slope_rvs[i])
+                            for i in range(len(pixel_tot))
+                        ]
+                    )
+                else:
+                    corr_pixel_flux = np.array(
+                        [
+                            stspnumba.linear_interpolator(pixel.rv, pixel_tot[i], pixel.rv-slope_rvs[i])
+                            for i in range(len(pixel_tot))
+                        ]
+                    )
                 # Carefull! When we have an active region, the master out does not correspond to pflux, the user must make it manually!
                 flux_weighted_spectra = np.array(
                     [
@@ -1092,7 +1104,7 @@ class Simulation:
                 master_out = np.mean(corr_pixel_flux[phase_mask], axis=0)
                 self.pixel_trans = corr_pixel_flux / master_out
                 self.integrated_spectra = corr_pixel_flux
-            except:
+            else:
                 None
 
         ###################

@@ -174,12 +174,20 @@ def visualize(sim, out, plot_type, lim=None, ref_wave=None, plot_lims=None, show
     cmap_phase = planet_gradient_2
     if show_data:
         if plot_type in ("tr", "shadow") and sim.has_planet and np.any(~phase_mask):
+            if sim._ccf_mode==False:
+                x_array=sim.pixel.wave
+                x_ref=ref_wave
+                xlabel=r"$\lambda$+" + str(ref_wave) + "(" + r"$\AA$" + ")" if ref_wave is not 0 else r"$\lambda$"+ "(" + r"$\AA$" + ")"
+            else:
+                x_array=sim.pixel.rv.value
+                x_ref=ref_wave
+                xlabel="RV " + str(ref_wave) + "(" + "km/s" + ")" if ref_wave is not 0 else "RV " + "(" + "km/s" + ")" 
             # Set up phase-colored series
             vmin_phase = np.min(planet_phases[~phase_mask])
             vmax_phase = np.max(planet_phases[~phase_mask])
             norm = Normalize(vmin=vmin_phase, vmax=vmax_phase)
 
-            x_right = sim.pixel.wave - ref_wave if ref_wave is not None else sim.pixel.wave * 0.0
+            x_right = x_array - x_ref if x_ref is not None else x_array * 0.0
             for i_frame, idx in enumerate(np.where(~phase_mask)[0]):
                 color_i = cmap_phase(norm(planet_phases[idx]))
                 if plot_type == "tr":
@@ -190,9 +198,11 @@ def visualize(sim, out, plot_type, lim=None, ref_wave=None, plot_lims=None, show
                     ydat = points_to_plot[idx]
                     axs[1].plot(x_right, ydat, color=color_i, alpha=0.9)
                     axs[1].set_ylabel("Flux")
-            axs[1].set_xlabel(r"$\lambda$+" + str(ref_wave) + "(" + r"$\AA$" + ")" if ref_wave is not None else r"$\lambda$")
+            axs[1].set_xlabel(xlabel)
             if lim is not None:
                 axs[1].set_xlim(lim[0] - (ref_wave or 0.0), lim[1] - (ref_wave or 0.0))
+            else:
+                axs[1].set_xlim(np.min(x_array), np.max(x_array))
             if plot_lims is not None:
                 axs[1].set_ylim(plot_lims[0], plot_lims[1])
             sm2 = ScalarMappable(cmap=cmap_phase, norm=norm)
@@ -428,8 +438,14 @@ def animate_visualization(
     # Right axis: create artists once
     right_artists = []
     if plot_type in ("tr", "shadow"):
+        if sim._ccf_mode==False:
+            x_array=sim.pixel.wave
+            x_ref=ref_wave
+        else:
+            x_array=sim.pixel.rv
+            x_ref=ref_wave
         if plot_type == "tr":
-            x_right = sim.pixel.wave - ref_wave
+            x_right = x_array - ref_wave
             y0 = (1 - points_to_plot[~phase_mask][0]) * 100 if np.any(~phase_mask) else np.zeros_like(x_right)
             line_spec, = axs[1].plot(
                 x_right, y0,
@@ -439,7 +455,7 @@ def animate_visualization(
             axs[1].set_ylabel("Absorption (%)")
             axs[1].set_xlabel(r"$\lambda$+" + str(ref_wave) + "(" + r"$\AA$" + ")")
         else:
-            x_right = sim.pixel.wave - ref_wave
+            x_right = x_array - ref_wave
             y0 = points_to_plot[~phase_mask][0] if np.any(~phase_mask) else np.zeros_like(x_right)
             line_spec, = axs[1].plot(
                 x_right, y0,
@@ -453,7 +469,7 @@ def animate_visualization(
         if lim:
             axs[1].set_xlim(lim[0] - ref_wave, lim[1] - ref_wave)
         else:
-            axs[1].set_xlim(np.min(sim.pixel.wave), np.max(sim.pixel.wave))
+            axs[1].set_xlim(np.min(x_array), np.max(x_array))
 
 
         if plot_lims:
@@ -682,5 +698,85 @@ def plot_absorption_map(sim,psi, absorption_spec,λ,cmap=transgrad):
 
     # Add colorbar with label
     fig.colorbar(sm, cax=cax, label="Absorption (%)")
+
+    return fig, ax
+
+
+def plot_shadow_map(sim,psi,x_lim=None,cmap=transgrad):
+
+    """
+    Plot the absorption spectrum as a color map over wavelength and orbital phase,
+    with transit duration and ingress/egress duration lines annotated.
+
+    Parameters:
+    sim                 : simulation object
+        The simulation object containing stellar and planetary parameters.
+    psi                 : array-like
+        Stellar rotation phase array.
+    absorption_spec     : 2D array
+        Absorption data to be plotted (shape matches meshgrid of wavelength and orbital phase).
+    x_lim                   : array-like with 2 elements
+        Wavelength or RV limits [min, max] for plot x-axis.
+    cmap                : matplotlib colormap
+        Colormap for the absorption spectrum.
+
+    Returns:
+    fig, ax : matplotlib Figure and Axes
+        The figure and axis containing the plot.
+    """
+
+
+    local_spectra=sim.master_out_fw - sim.integrated_spectra_fw
+    tr_dur, tr_ingress_egress = transit_durations(sim)
+
+    # Convert rotation phases to planetary orbital phases
+    psi_planet=(psi*sim.star.prot/sim.planet.P).value
+    # Create meshgrid for plotting 2D array
+    fig, ax = plt.subplots(figsize=(14,7))
+
+    if sim._ccf_mode:
+        x_array=sim.pixel.rv.value
+        ax.set_xlabel("RV "+"(km/s)")
+    else:
+        x_array=sim.pixel.wave
+        ax.set_xlabel("Wavelength "+"("+r"$\AA$"+")")
+    
+    
+    X, Y = np.meshgrid(x_array, psi_planet)
+    
+    if x_lim:
+        None
+    else:
+        x_lim=[np.min(x_array), np.max(x_array)]
+
+    
+    ax.set_xlim(x_lim[0], x_lim[1])
+
+    flim=np.max(local_spectra)
+
+    im = ax.pcolormesh(X, Y, local_spectra, cmap="jet", vmin=0, vmax=flim)
+
+    # Plot horizontal lines for transit durations in orbital phase
+    ax.plot(x_lim, [-tr_dur/2, -tr_dur/2], '-w')
+    ax.plot(x_lim, [tr_dur/2, tr_dur/2], '-w')
+    ax.plot(x_lim, [-tr_ingress_egress/2, -tr_ingress_egress/2], '--k')
+    ax.plot(x_lim, [tr_ingress_egress/2, tr_ingress_egress/2], '--k')
+    ax.set_ylabel("Orbital Phase")
+
+    # Colorbar creation and positioning next to the plot
+    sm = ScalarMappable(cmap=im.get_cmap())
+    sm.set_clim(np.min(local_spectra), np.max(local_spectra))
+    sm.set_array([])  # Required for colorbar
+
+    # Get figure and image axes position
+    image_position = im.axes.get_position()
+
+    # Define new axes for colorbar slightly to the right
+    colorbar_width = image_position.width * 0.03  # small width relative to plot
+    cax = fig.add_axes([image_position.x1 + 0.011, image_position.y0, 
+                        colorbar_width, image_position.height])
+
+    # Add colorbar with label
+    fig.colorbar(sm, cax=cax, label="Flux")
 
     return fig, ax

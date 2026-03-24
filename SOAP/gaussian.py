@@ -4,7 +4,7 @@ import numpy as np
 DEBUG = False
 
 
-@numba.njit(cache=True)
+@numba.njit(cache=True, fastmath=True)
 def gauss(p: np.ndarray, x: np.ndarray):
     """A Gaussian function with parameters p = [A, x0, σ, offset]."""
     return p[0] * np.exp(-((x - p[1]) ** 2) / (2.0 * p[2] ** 2)) + p[3]
@@ -21,7 +21,7 @@ def unit_gauss(x0: float, fwhm: float, x: np.ndarray):
     return a * np.exp(tau)
 
 
-@numba.jit(cache=True, nopython=True)
+@numba.jit(cache=True, nopython=True, fastmath=True)
 def BIS_HARPS(rv: np.ndarray, ccf: np.ndarray, p0: tuple) -> float:
     """
     BIS (Bisector Inverse Slope) calculation as performed by the HARPS pipeline.
@@ -221,65 +221,74 @@ def jacobian_gaussian(x, params):
     jacobian = np.vstack([dA, dmu, dsigma, dC]).T
     return jacobian
 
+from scipy.optimize import least_squares
 
-def levenberg_marquardt(
-    func, jacobian, x_data, y_data, theta_init, max_iter=200, tol=1e-8, lambda_init=0.01
-):
-    """
-    Levenberg-Marquardt algorithm for non-linear least squares optimization.
+def levenberg_marquardt(a,b,rv, ccf, p0):
+    res = least_squares(
+        lambda p: gaussian(rv, p) - ccf,
+        p0,
+        method='lm',
+        jac=lambda p: jacobian_gaussian(rv, p),
+    )
+    return res.x
+# def levenberg_marquardt(
+#     func, jacobian, x_data, y_data, theta_init, max_iter=200, tol=1e-8, lambda_init=0.01
+# ):
+#     """
+#     Levenberg-Marquardt algorithm for non-linear least squares optimization.
 
-    Parameters:
-    - func: A function that returns the model prediction for given parameters.
-    - jacobian: A function that returns the Jacobian matrix of the model.
-    - x_data: Input data for the model.
-    - y_data: Observed data.
-    - theta_init: Initial guess for the parameters [A, mu, sigma, C].
-    - max_iter: Maximum number of iterations.
-    - tol: Tolerance for convergence.
-    - lambda_init: Initial damping factor.
+#     Parameters:
+#     - func: A function that returns the model prediction for given parameters.
+#     - jacobian: A function that returns the Jacobian matrix of the model.
+#     - x_data: Input data for the model.
+#     - y_data: Observed data.
+#     - theta_init: Initial guess for the parameters [A, mu, sigma, C].
+#     - max_iter: Maximum number of iterations.
+#     - tol: Tolerance for convergence.
+#     - lambda_init: Initial damping factor.
 
-    Returns:
-    - theta: Optimized parameters [A, mu, sigma, C].
-    """
-    # Initial parameter guess
-    theta = np.array(theta_init, dtype=float)
-    lambda_ = lambda_init  # Initial damping factor
+#     Returns:
+#     - theta: Optimized parameters [A, mu, sigma, C].
+#     """
+#     # Initial parameter guess
+#     theta = np.array(theta_init, dtype=float)
+#     lambda_ = lambda_init  # Initial damping factor
 
-    for iteration in range(max_iter):
-        # Compute residuals and Jacobian at the current parameters
-        residuals = func(x_data, theta) - y_data
-        jacobian_matrix = jacobian(x_data, theta)
+#     for iteration in range(max_iter):
+#         # Compute residuals and Jacobian at the current parameters
+#         residuals = func(x_data, theta) - y_data
+#         jacobian_matrix = jacobian(x_data, theta)
 
-        # Compute the normal equation: (J^T * J + lambda * I) * delta_theta = J^T * residuals
-        JTJ = np.dot(jacobian_matrix.T, jacobian_matrix)  # J^T * J
-        JTr = np.dot(jacobian_matrix.T, residuals)  # J^T * residuals
+#         # Compute the normal equation: (J^T * J + lambda * I) * delta_theta = J^T * residuals
+#         JTJ = np.dot(jacobian_matrix.T, jacobian_matrix)  # J^T * J
+#         JTr = np.dot(jacobian_matrix.T, residuals)  # J^T * residuals
 
-        # Identity matrix of the same size as JTJ
-        I = np.eye(len(theta))
+#         # Identity matrix of the same size as JTJ
+#         I = np.eye(len(theta))
 
-        # Update step (delta_theta)
-        A = JTJ + lambda_ * I
-        delta_theta = np.linalg.solve(A, JTr)
+#         # Update step (delta_theta)
+#         A = JTJ + lambda_ * I
+#         delta_theta = np.linalg.solve(A, JTr)
 
-        # Update the parameters
-        theta_new = theta - delta_theta
+#         # Update the parameters
+#         theta_new = theta - delta_theta
 
-        # Compute new residuals and check for convergence
-        residuals_new = func(x_data, theta_new) - y_data
-        if np.linalg.norm(residuals_new) < np.linalg.norm(residuals):
-            # If residuals decreased, accept the new parameters and reduce lambda
-            lambda_ *= 0.1
-            theta = theta_new
-        else:
-            # If residuals did not decrease, increase lambda
-            lambda_ *= 10
+#         # Compute new residuals and check for convergence
+#         residuals_new = func(x_data, theta_new) - y_data
+#         if np.linalg.norm(residuals_new) < np.linalg.norm(residuals):
+#             # If residuals decreased, accept the new parameters and reduce lambda
+#             lambda_ *= 0.1
+#             theta = theta_new
+#         else:
+#             # If residuals did not decrease, increase lambda
+#             lambda_ *= 10
 
-        # Check for convergence (change in parameters is small enough)
-        if np.linalg.norm(delta_theta) < tol:
-            # print(f"Converged in {iteration} iterations.")
-            break
+#         # Check for convergence (change in parameters is small enough)
+#         if np.linalg.norm(delta_theta) < tol:
+#             # print(f"Converged in {iteration} iterations.")
+#             break
 
-    return theta
+#     return theta
 
 
 def compute_rv_fwhm(rv: np.ndarray, ccf: np.ndarray):
