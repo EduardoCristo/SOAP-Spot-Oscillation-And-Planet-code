@@ -31,20 +31,36 @@ def planck_law(λ, T):
 
 
 
-@numba.njit(cache=True, parallel=True, fastmath=True)
-def itot_flux(coeffs, law, grid):
-    delta = 2.0 / grid
-    size = grid * grid
-    y = np.linspace(-1 + delta/2, 1 - delta/2, grid)
-    z = y.copy()
-    total = 0.0
-    for i in prange(grid):
-        for j in range(grid):  # Hybrid: prange outer
-            yy, zz = y[i], z[j]
-            if yy*yy + zz*zz > 1: continue
-            _, limb = ld(yy, zz, coeffs, law)
-            total += limb * delta * delta
+@numba.njit(cache=True, nopython=True)
+def itot_flux(u1: np.float64, u2: np.float64, grid: np.int32):
+    """
+    Calculate the flux in each cell of the grid and integrate over the entire
+    stellar disc.
+
+    Arguments
+    ---------
+    u1, u2 : float
+        Quadratic limb-darkening parameters
+    grid : int
+        Grid size
+    """
+    # step of the grid. grid goes from -1 to 1, therefore 2 in total
+    delta_grid = 2.0 / grid
+    # total stellar intensity (without spots)
+    total = 0
+    y_positions = np.linspace(-1.0 + delta_grid / 2.0, 1.0 - delta_grid / 2.0, grid)
+    z_positions = np.linspace(-1.0 + delta_grid / 2.0, 1.0 - delta_grid / 2.0, grid)
+    # Scan of each cell on the grid
+    for iy,y in enumerate(y_positions):
+        for iz,z in enumerate(z_positions):
+            # projected radius on the sky smaller than 1,
+            # which means that we are on the stellar disc
+            if (y**2 + z**2) <=1:
+                _, limb = ld(y, z, u1, u2)
+                total+= limb # check this
+
     return total
+
 
 @numba.njit(cache=True, nopython=True)
 def doppler_shift_wave(wave: np.ndarray, rv: float):
