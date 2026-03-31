@@ -616,7 +616,8 @@ class CCF:
 
 class solarCCF(CCF):
     
-    """ Solar CCF obtained by cross-correlation with a G2 mask Pepe+2002, which spectra was obtained with the FTS spectrograph, for the quiet Sun (Wallace+1998) or a sunspot umbra(Wallace+1995).
+    """ 
+    Solar CCF obtained by cross-correlation with a G2 mask (Pepe+2002), which spectra was obtained with the FTS spectrograph, for the quiet Sun (Wallace+1998) or a sunspot umbra(Wallace+1995).
     Source: https://nso.edu/data/historical-archive/
 
     Args:
@@ -624,6 +625,7 @@ class solarCCF(CCF):
             Rotation velocity of the star (used to select a wider CCF window)
         active_region (bool, default False):
             Get the CCF for the active region instead of the quiet Sun
+    
     Attributes:
         rv (array-like):
             Radial velocity array where the CCF is defined [km/s].
@@ -664,7 +666,34 @@ class solarCCF(CCF):
 
 
 class gaussianCCF(CCF):
-    """A Gaussian CCF defined by a depth [0-1] and a FWHM in km/s"""
+    """
+    A local stellar CCF modeled by a Gaussian profile, which is a common approximation. The Gaussian is defined by its depth and FWHM, and is centered at a given radial velocity. The CCF is defined over a window of RV values, with a specified step size.
+
+    Args:
+        depth (float):
+            Amplitude of the CCF, between 0 and 1
+        fwhm (float):
+            Full width at half maximum of the CCF [km/s]
+        RV (float):
+            Radial velocity where the CCF is centered [km/s]
+        window (float):
+            The CCF is defined between -window and +window [km/s]
+        step (float):
+            Radial velocity step of the CCF [km/s]
+        convolved (bool, optional):
+            Whether the CCF is already convolved with the instrumental
+            profile.
+
+    Attributes:
+        rv (array-like):
+            Radial velocity array where the CCF is defined [km/s].
+        intensity (array-like):
+            CCF intensity array.
+        n (int):
+            Number of points in the CCF.
+        step (float):
+            Step size between consecutive RV points [km/s].
+    """
 
     @maybe_quantity_input(fwhm=kms, RV=kms, window=kms, step=kms)
     def __init__(
@@ -770,10 +799,6 @@ class SpectrumNumbaInterpolated:
         # identical boundary policy as before (no extrapolation)
         if mu < np.min(self.μ):
             return self.flux2d[:, 0]
-        # elif mu > np.max(self.μ):
-        #     return self.flux2d[:, -1]
-        # interpolate along μ only; wavelength samples are native, so no λ interpolation required
-        # flux2d is (N_wave, M_mu); transpose once on-the-fly for μ-major access
         return _blend_rows(mu, self.μ, self.flux2d.T)
 
 
@@ -1007,11 +1032,40 @@ class solarFTS(Spectrum):
         self.wave_range = wave_range
 
 class Spec_mu(Spectrum):
+    """
+    A class representing local input spectra defined on a grid of μ values, with wavelength and flux arrays, and methods to manipulate them. 
+    The grid of spectra will be linearly interpolated to get the spectrum at any μ value between 0 and 1. 
+    Near the limb (μ close to 0), the spectra are set to match the smallest μ value spectrum. 
+    Near the disk center (μ close to 1), the spectra can be extrapolated by taking the spectrum at the largest μ value. 
+    The spectra must be defined on the same wavelength grid for all μ values.
+    
+    Args:
+        mu_array (array-like):
+            Array of μ values where the spectrum is defined, between 0 and 1.
+        wavelength (array-like):
+            Wavelength array of the spectrum [Angstrom]. Must be the same for all μ values.
+        spectra (array-like):
+            Array of spectra for each μ value.
+        wave_range (tuple of float, optional):
+            Wavelength range to get the spectrum, in Angstrom. Default is (4198, 7998).
+        air_wave (bool, optional):
+            If True, convert the wavelengths from vacuum to air. Default is True.
+
+    Attributes:
+        μ (array-like):
+            Array of μ values where the spectrum is defined, between 0 and 1.
+        wave (array-like):
+            Wavelength array of the spectrum [Angstrom].
+        flux (array-like):
+            Flux array of the spectrum, same shape as wave.
+    Outputs:
+        A Spectrum object that can be called with a μ value to get the corresponding spectrum, and that can be interpolated to other wavelengths or convolved to other resolutions.
+    """
     def __init__(self,
                  mu_array,
                  wavelength,
                  spectra,
-                 wave_range=(4198, 7998),
+                 wave_range,
                  air_wave=True
                  ):
         self.μ = mu_array
@@ -1026,7 +1080,6 @@ class Spec_mu(Spectrum):
         # remove NaNs
         nan_mask = np.zeros_like(wave, dtype=bool)
         for i,f in enumerate(flux.T):
-            #flux.T[i]=f/np.max(flux.T[-1])
             flux.T[i]=f/np.max(flux.T[i])
 
         for f in flux.T:
@@ -1055,6 +1108,31 @@ class Spec_mu(Spectrum):
         )
 
 class solarIAGatlas(Spectrum):
+    """
+    A class representing the Goettingen Solar Atlas, with wavelength and flux arrays, and methods to manipulate them.
+    The grid of spectra is linearly interpolated to get the spectrum at any μ value between 0 and 1. 
+    Near the limb (μ close to 0), the spectra are set to match the smallest μ value spectrum. 
+    Near the disk center (μ close to 1), the spectra can be extrapolated by taking the spectrum at the largest μ value.
+    Default: μ = [0.2, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.97, 0.98, 0.99, 1]
+    Source: http://www.astro.physik.uni-goettingen.de/research/solar-lib/
+
+    Args:
+        wave_range (tuple of float, optional):
+            Wavelength range to get the spectrum, in Angstrom. Default is (4198, 7998).
+        air_wave (bool, optional):
+            If True, convert the wavelengths from vacuum to air. Default is True.
+    
+    Attributes:
+        μ (array-like):
+            Array of μ values where the spectrum is defined, between 0 and 1.
+        wave (array-like):
+            Wavelength array of the spectrum [Angstrom].
+        flux (array-like):
+            Flux array of the spectrum, same shape as wave.
+    
+    Outputs:
+        A Spectrum object that can be called with a μ value to get the corresponding spectrum, and that can be interpolated to other wavelengths or convolved to other resolutions.     
+    """
     def __init__(self, wave_range=(4198, 7998), air_wave=True):
         here = os.path.dirname(__file__)
         files = sorted(glob(os.path.join(here, "../data/IAGatlas/*.fits")))
@@ -1121,6 +1199,7 @@ class solarIAGatlas(Spectrum):
 class PHOENIX(Spectrum):
     """
     A class representing a PHOENIX spectrum, with wavelength and flux arrays, and methods to manipulate them.
+
     Args:
         ar (bool, optional):
             If True, get the spectrum for a spot (with a contrast in temperature). If False, get the spectrum for the quiet photosphere. Default is False.
@@ -1142,6 +1221,12 @@ class PHOENIX(Spectrum):
             If True, normalize the spectrum by fitting a linear continuum to the 10% highest flux points in the spectrum. Default is False.
         cache (bool, optional):
             If True, save the spectrum to a file and load it if the same parameters are used again. Default is True.
+    
+    Attributes:
+        wave (array-like):
+            Wavelength array of the spectrum [Angstrom].
+        flux (array-like):
+            Flux array of the spectrum, same shape as wave.
     """
     def __init__(
         self,
