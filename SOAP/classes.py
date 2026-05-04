@@ -1065,7 +1065,7 @@ class Spec_mu(Spectrum):
                  mu_array,
                  wavelength,
                  spectra,
-                 wave_range,
+                 wave_range=None,
                  air_wave=True
                  ):
         self.μ = mu_array
@@ -1073,19 +1073,26 @@ class Spec_mu(Spectrum):
         flux=spectra
 
         # wave cuts
-        mask = (wave > wave_range[0]) & (wave < wave_range[1])
-        wave = wave[mask]
-        flux = flux[mask]
+        if wave_range is not None:
+            mask = (wave > wave_range[0]) & (wave < wave_range[1])
+            wave = wave[mask]
+            flux = flux[mask]
+        else:
+            None
+            wave = wave
+            flux = flux
 
-        # remove NaNs
-        nan_mask = np.zeros_like(wave, dtype=bool)
-        for i,f in enumerate(flux.T):
-            flux.T[i]=f/np.max(flux.T[i])
+        nan_check = np.isnan(flux).any()
+        if nan_check:
+            # remove NaNs
+            nan_mask = np.zeros_like(wave, dtype=bool)
+            for i,f in enumerate(flux.T):
+                flux.T[i]=f/np.max(flux.T[i])
 
-        for f in flux.T:
-            nan_mask = np.logical_or(nan_mask, np.isnan(f))
-        wave = wave[~nan_mask]
-        flux = flux[~nan_mask, :]
+            for f in flux.T:
+                nan_mask = np.logical_or(nan_mask, np.isnan(f))
+            wave = wave[~nan_mask]
+            flux = flux[~nan_mask, :]
 
         # conversions
         wave = wave.astype(float)
