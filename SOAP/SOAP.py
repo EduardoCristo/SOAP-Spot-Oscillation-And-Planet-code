@@ -18,7 +18,7 @@ import time
 from copy import copy, deepcopy
 
 import numpy as np
-
+from copy import deepcopy as dpcy
 from SOAP import units
 
 from . import classes
@@ -368,7 +368,8 @@ class Simulation:
             self.pixel.resample(resample_spectra, inplace=True)
         self.active_regions = active_regions
         self.ring = ring
-
+        if self.ring:
+            raise UserWarning("Ring implementation not tested")
         self.nrho = nrho
         self.grid = grid
         self.inst_reso = inst_reso
@@ -607,10 +608,12 @@ class Simulation:
         skip_rv=False,
         skip_fwhm=False,
         skip_bis=False,
+        skip_shadow=True,
         renormalize_rv=True,
         save_ccf=False,
         template=None,
         itot=None,
+        n_sub=4,
         **kwargs,
     ):
         """
@@ -626,6 +629,7 @@ class Simulation:
             save_ccf (bool): If True, save the output CCFs to a file.
             template (dict): Input spectrum to construct the CCF. Must contain: "wave" (nm) and "flux" arrays.
             itot (tuple): Precomputed quiet star pixel and flux to use instead of recalculating.
+            n_sub (int): Number of grid sub-division for active regions
             **kwargs: Additional keyword arguments.
 
         Returns:
@@ -705,6 +709,7 @@ class Simulation:
                 ring,
                 self._ccf_mode,
                 skip_rv,
+                n_sub
             )
             flux_spot = out[0]
             if DEBUG:
@@ -747,6 +752,7 @@ class Simulation:
         if DEBUG:
             print(self.has_planet)
         if self.has_planet:
+            from copy import deepcopy as dpcy
             if not self._ccf_mode:
                 
                 if DEBUG:
@@ -845,6 +851,7 @@ class Simulation:
             pixel_bconv = pixel_bconv
             old_pixel_tot = deepcopy(pixel_tot)
             pixel_tot = pixel_tot - pixel_planet
+            save_pixel_tot=dpcy(pixel_tot)
         # normalize the flux of the star
         FLUXstar = FLUXstar / flux_quiet
 
@@ -862,9 +869,33 @@ class Simulation:
         self.pixel_bconv = pixel_bconv = (pixel_bconv.T / np.max(pixel_bconv, axis=1)).T
         self.pixel_tot = pixel_tot = (pixel_tot.T / np.max(pixel_tot, axis=1)).T
 
-        # self.pixel_quiet = pixel_quiet = pixel_quiet / max(pixel_quiet)
+        if skip_shadow==False:
+            from copy import deepcopy as dpcy
+            no_planet=dpcy(self.planet)
+            no_planet.Rp=0
+            no_planet=without_units(no_planet)
+            if len(active_regions) != 0:
+                out_np = stspnumba.active_region_contributions(
+                    psi,
+                    star,
+                    active_regions,
+                    pixel,
+                    pixel_ar,
+                    self.grid,
+                    self.nrho,
+                    self.wlll,
+                    no_planet,
+                    ring,
+                    self._ccf_mode,
+                    skip_rv,
+                    n_sub
+                )
+                pixel_tot_np = np.tile(pixel_quiet, (psi.size, 1)) - out_np[3]
+            else:
+                pixel_tot_np=np.tile(pixel_quiet, (psi.size, 1))
+            self.pixel_shadow=((pixel_tot_np-save_pixel_tot).T/np.max(pixel_quiet)).T
+            
 
-        # return pixel_flux, pixel_bconv
 
         if self._ccf_mode:
             out = stspnumba.clip_ccfs(
@@ -1065,9 +1096,13 @@ class Simulation:
                 psi_out = planet_phases[phase_mask]
 
                 slope_coefs = np.polyfit(psi_out, rv_tot_out, deg=1)
+                slope_flux_coefs= np.polyfit(psi_out, FLUXstar[phase_mask].value, deg=1)
 
                 slope_rvs = slope_coefs[0] * planet_phases + slope_coefs[1]
-
+                slope_flux= slope_flux_coefs[0] * planet_phases + slope_flux_coefs[1]
+                #import matplotlib.pyplot as plt
+                # plt.plot(FLUXstar/slope_flux)
+                # plt.show()
                 if DEBUG == True:
                     print("Slopes coefficients out-of-transit")
                     print(slope_coefs)
@@ -1094,7 +1129,7 @@ class Simulation:
                 # Carefull! When we have an active region, the master out does not correspond to pflux, the user must make it manually!
                 flux_weighted_spectra = np.array(
                     [
-                        corr_pixel_flux[j] * FLUXstar[j]
+                        corr_pixel_flux[j] * FLUXstar[j]/slope_flux[j]
                         for j in range(len(corr_pixel_flux))
                     ]
                 )

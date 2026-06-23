@@ -1083,16 +1083,16 @@ class Spec_mu(Spectrum):
             flux = flux
 
         nan_check = np.isnan(flux).any()
-        if nan_check:
-            # remove NaNs
-            nan_mask = np.zeros_like(wave, dtype=bool)
-            for i,f in enumerate(flux.T):
-                flux.T[i]=f/np.max(flux.T[i])
+        # if nan_check:
+        #     # remove NaNs
+        #     nan_mask = np.zeros_like(wave, dtype=bool)
+        #     for i,f in enumerate(flux.T):
+        #         flux.T[i]=f/np.max(flux.T[i])
 
-            for f in flux.T:
-                nan_mask = np.logical_or(nan_mask, np.isnan(f))
-            wave = wave[~nan_mask]
-            flux = flux[~nan_mask, :]
+        #     for f in flux.T:
+        #         nan_mask = np.logical_or(nan_mask, np.isnan(f))
+        #     wave = wave[~nan_mask]
+        #     flux = flux[~nan_mask, :]
 
         # conversions
         wave = wave.astype(float)

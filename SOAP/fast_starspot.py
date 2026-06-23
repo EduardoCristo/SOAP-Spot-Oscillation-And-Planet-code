@@ -376,13 +376,13 @@ def itot_rv(
     return f_star, total
 
 
-@numba.njit(cache=True, nopython=True)
+@numba.njit(cache=True, fastmath=True)
 def ar_init(
     s: float, longitude: float, latitude: float, inclination: float, nrho: int
 ) -> np.ndarray:
     """
     Calculate the position of the active region, initialized at the disc center.
-
+    
     Args:
         s: active region radius
         longitude [degree]
@@ -390,87 +390,61 @@ def ar_init(
         inclination [degree] i=0  -> pole-on (North)
                              i=90 -> equator-on
         nrho : Active region circumference resolution
-
+    
     Returns:
         xyz : real position of the active region after applying rotations
     """
-
     # Conversions [deg] -> [rad]
-    longitude = longitude * pi / 180.0
-    latitude = latitude * pi / 180.0
-    inclination = inclination * pi / 180.0
+    longitude = longitude * np.pi / 180.0
+    latitude = latitude * np.pi / 180.0
+    inclination = inclination * np.pi / 180.0
 
-    # In this initial disc center position, we calculate the coordinates
-    # (x,y,z) of points of the active region's circumference
-
-    # A circular active region has a resolution given by nrho, which implies
-    # that we will have a point on the disc circumference every 2*pi/(nrho-1)
-    # -1 because there is (nrho-1) intervals
-    rho_step = 2.0 * pi / (nrho - 1)
-
-    rho = np.arange(-pi, pi + rho_step, rho_step)
-    # rho = np.linspace(-pi, pi, nrho, endpoint=False) # check
-
-    # x = sqrt(r^2-s^2), where r is the radius. r=1 therefore r^2=1
-    # The active region is on the surface, so very close to x=1. However with
-    # the curvature of the sphere, the circumference of the active region is at
-    # x = sqrt(r^2-s^2)
-    xyz2 = np.empty((3, nrho))
-    xyz2[0] = np.sqrt(1 - s**2)
-    xyz2[1] = s * np.cos(rho)  # projection of the circumference on the y axis
-    xyz2[2] = s * np.sin(rho)  # projection of the circumference on the z axis
-
-    # to account for the real projection of the active region, we rotate the star and
-    # look how the coordinates of the circumference of the active region change position
-    # according to latitude, longitude and inclination.
-    # It consists of three rotations
-    #
-    # Conventions :
-    # - for inclination = 0, the star rotates around z axis
-    # - the line of sight is along x-axis
-    # - sky plane is the yz-plane
-    #
-    # Let Rx(α), Ry(β), Rz(γ) be the rotation matrices around the x, y, and z
-    # axis with angles α, β, γ
-    # (counter-clockwise direction when looking toward the origin)
-    #
-    # The rotations to apply are:
-    #   Ry(inclination) x Rz(longitude) x Ry(latitude)
-    #
-    #         |  cos(β)  0  sin(β) |                    | cos(γ) -sin(γ) 0 |
-    # Ry(β) = |    0     1    0    |            Rz(γ) = | sin(γ)  cos(γ) 0 |
-    #         | -sin(β)  0  cos(β) |                    |   0       0    1 |
-    #
-    #
-    # |x'|   |  cos(b2)cos(γ)cos(b)-sin(b)sin(b2)  -sin(γ)cos(b2)  cos(b2)cos(γ)sin(b)+sin(b2)cos(b) |   |x|
-    # |y'| = |              sin(γ)cos(b)               cos(γ)                   sin(γ)sin(b)         | x |y|
-    # |z'|   |  -sin(b2)cos(γ)cos(b)-cos(b2)sin(b)  sin(b2)sin(γ) -sin(b2)cos(γ)sin(b)+cos(b2)cos(b) |   |z|
-
+    # Define angles for rotation matrices
     b = -latitude
     g = longitude
-    b2 = pi / 2.0 - inclination
+    b2 = np.pi / 2.0 - inclination
 
-    R = np.array(
-        [
-            [
-                cos(b2) * cos(g) * cos(b) - sin(b) * sin(b2),
-                -sin(g) * cos(b2),
-                cos(b2) * cos(g) * sin(b) + sin(b2) * cos(b),
-            ],
-            [sin(g) * cos(b), cos(g), sin(g) * sin(b)],
-            [
-                -sin(b2) * cos(g) * cos(b) - cos(b2) * sin(b),
-                sin(b2) * sin(g),
-                -sin(b2) * cos(g) * sin(b) + cos(b2) * cos(b),
-            ],
-        ]
-    )
+    # Precompute all trigonometric values once
+    cos_b = np.cos(b)
+    sin_b = np.sin(b)
+    cos_g = np.cos(g)
+    sin_g = np.sin(g)
+    cos_b2 = np.cos(b2)
+    sin_b2 = np.sin(b2)
 
-    # xyz is the real position of the active region after rotating the star to
-    # have the initial equatorial active region at the correct longitude and
-    # latitude, also taking into account the stellar inclination
-    xyz = np.dot(R, xyz2)
-    return xyz.T
+    # Precompute rotation matrix elements (Ry(inclination) x Rz(longitude) x Ry(latitude))
+    r00 = cos_b2 * cos_g * cos_b - sin_b * sin_b2
+    r01 = -sin_g * cos_b2
+    r02 = cos_b2 * cos_g * sin_b + sin_b2 * cos_b
+    r10 = sin_g * cos_b
+    r11 = cos_g
+    r12 = sin_g * sin_b
+    r20 = -sin_b2 * cos_g * cos_b - cos_b2 * sin_b
+    r21 = sin_b2 * sin_g
+    r22 = -sin_b2 * cos_g * sin_b + cos_b2 * cos_b
+
+    # Generate rho values for circumference sampling
+    rho_step = 2.0 * np.pi / (nrho - 1)
+    rho = np.arange(-np.pi, np.pi + rho_step, rho_step)
+
+    # Precompute constant x coordinate (same for all points on circumference)
+    x_const = np.sqrt(1.0 - s*s)
+
+    # Allocate output array (avoid temporary intermediate arrays)
+    xyz = np.empty((nrho, 3))
+
+    # Compute points and apply rotation in single loop
+    for i in range(nrho):
+        rhoval = rho[i]
+        y = s * np.cos(rhoval)  # y-axis projection
+        z = s * np.sin(rhoval)  # z-axis projection
+
+        # Apply rotation matrix to point [x_const, y, z]
+        xyz[i, 0] = r00 * x_const + r01 * y + r02 * z  # x'
+        xyz[i, 1] = r10 * x_const + r11 * y + r12 * z  # y'
+        xyz[i, 2] = r20 * x_const + r21 * y + r22 * z  # z'
+
+    return xyz
 
 
 @numba.njit(cache=True, nopython=True)
@@ -600,78 +574,62 @@ def ar_area(xyz, nrho, grid):
     return visible, iminy, iminz, imaxy, imaxz
 
 
-@numba.njit(cache=True, nopython=True)
+@numba.njit(cache=True, fastmath=True)  # Added fastmath for additional speed
 def ar_inverse_rotation(
     xyz: np.ndarray, longitude: float, latitude: float, inclination: float, phase: float
 ):
-    """
-    Relocate a point (x,y,z) to the 'initial' configuration, i.e. when the
-    active region is on the disc center. This consists in rotating the point,
-    according to latitude, longitude, inclination and phase, but in the reverse
-    order.
+    # Precompute angle conversions and trigonometric values once
+    g2 = (-1.0 + phase) * (2.0 * np.pi)  # inverse phase
+    i = inclination * np.pi / 180.0
+    b = latitude * np.pi / 180.0
+    g = -longitude * np.pi / 180.0
+    b2 = -(np.pi / 2.0 - i)
 
-    Conventions:
-    - when inclination=0 the star rotates around z axis
-    - line of sight is along x-axis
-    - sky plane = yz-plane
-    """
+    # Precompute all needed trigonometric values
+    cg2, sg2 = np.cos(g2), np.sin(g2)
+    ci, si = np.cos(i), np.sin(i)
+    cb, sb = np.cos(b), np.sin(b)
+    cg, sg = np.cos(g), np.sin(g)
+    cb2, sb2 = np.cos(b2), np.sin(b2)
 
-    g2 = (-1.0 + phase) * (2.0 * pi)  # inverse phase ([0-1] -> [rad])
-    i = inclination * pi / 180.0
-    b = latitude * pi / 180.0
-    g = -longitude * pi / 180.0
-    b2 = -(pi / 2.0 - i)
+    # First rotation matrix (R) - computed element-wise
+    R00 = (1 - cg2) * ci * ci + cg2
+    R01 = sg2 * si
+    R02 = (1 - cg2) * ci * si
+    R10 = -sg2 * si
+    R11 = cg2
+    R12 = sg2 * ci
+    R20 = (1 - cg2) * si * ci
+    R21 = -sg2 * ci
+    R22 = (1 - cg2) * si * si + cg2
 
-    R = [
-        [
-            (1 - cos(g2)) * cos(i) * cos(i) + cos(g2),
-            sin(g2) * sin(i),
-            (1 - cos(g2)) * cos(i) * sin(i),
-        ],
-        [-sin(g2) * sin(i), cos(g2), sin(g2) * cos(i)],
-        [
-            (1 - cos(g2)) * sin(i) * cos(i),
-            -sin(g2) * cos(i),
-            (1 - cos(g2)) * sin(i) * sin(i) + cos(g2),
-        ],
-    ]
+    # Second rotation matrix (R2) - computed element-wise
+    R2_00 = cb * cg * cb2 - sb2 * sb
+    R2_01 = -sg * cb
+    R2_02 = cb * cg * sb2 + sb * cb2
+    R2_10 = sg * cb2
+    R2_11 = cg
+    R2_12 = sg * sb2
+    R2_20 = -sb * cg * cb2 - cb * sb2
+    R2_21 = sb * sg
+    R2_22 = -sb * cg * sb2 + cb * cb2
 
-    R2 = [
-        [
-            cos(b) * cos(g) * cos(b2) - sin(b2) * sin(b),
-            -sin(g) * cos(b),
-            cos(b) * cos(g) * sin(b2) + sin(b) * cos(b2),
-        ],
-        [sin(g) * cos(b2), cos(g), sin(g) * sin(b2)],
-        [
-            -sin(b) * cos(g) * cos(b2) - cos(b) * sin(b2),
-            sin(b) * sin(g),
-            -sin(b) * cos(g) * sin(b2) + cos(b) * cos(b2),
-        ],
-    ]
+    # Combined rotation matrix (R3 = R2 @ R) - computed element-wise
+    R3_00 = R2_00 * R00 + R2_01 * R10 + R2_02 * R20
+    R3_01 = R2_00 * R01 + R2_01 * R11 + R2_02 * R21
+    R3_02 = R2_00 * R02 + R2_01 * R12 + R2_02 * R22
+    R3_10 = R2_10 * R00 + R2_11 * R10 + R2_12 * R20
+    R3_11 = R2_10 * R01 + R2_11 * R11 + R2_12 * R21
+    R3_12 = R2_10 * R02 + R2_11 * R12 + R2_12 * R22
+    R3_20 = R2_20 * R00 + R2_21 * R10 + R2_22 * R20
+    R3_21 = R2_20 * R01 + R2_21 * R11 + R2_22 * R21
+    R3_22 = R2_20 * R02 + R2_21 * R12 + R2_22 * R22
 
-    R3 = [
-        [
-            R2[0][0] * R[0][0] + R2[0][1] * R[1][0] + R2[0][2] * R[2][0],
-            R2[0][0] * R[0][1] + R2[0][1] * R[1][1] + R2[0][2] * R[2][1],
-            R2[0][0] * R[0][2] + R2[0][1] * R[1][2] + R2[0][2] * R[2][2],
-        ],
-        [
-            R2[1][0] * R[0][0] + R2[1][1] * R[1][0] + R2[1][2] * R[2][0],
-            R2[1][0] * R[0][1] + R2[1][1] * R[1][1] + R2[1][2] * R[2][1],
-            R2[1][0] * R[0][2] + R2[1][1] * R[1][2] + R2[1][2] * R[2][2],
-        ],
-        [
-            R2[2][0] * R[0][0] + R2[2][1] * R[1][0] + R2[2][2] * R[2][0],
-            R2[2][0] * R[0][1] + R2[2][1] * R[1][1] + R2[2][2] * R[2][1],
-            R2[2][0] * R[0][2] + R2[2][1] * R[1][2] + R2[2][2] * R[2][2],
-        ],
-    ]
-
-    xyz_out = np.zeros(3)
-    xyz_out[0] = R3[0][0] * xyz[0] + R3[0][1] * xyz[1] + R3[0][2] * xyz[2]
-    xyz_out[1] = R3[1][0] * xyz[0] + R3[1][1] * xyz[1] + R3[1][2] * xyz[2]
-    xyz_out[2] = R3[2][0] * xyz[0] + R3[2][1] * xyz[1] + R3[2][2] * xyz[2]
+    # Apply combined rotation to input vector
+    xyz_out = np.empty(3)
+    xyz_out[0] = R3_00 * xyz[0] + R3_01 * xyz[1] + R3_02 * xyz[2]
+    xyz_out[1] = R3_10 * xyz[0] + R3_11 * xyz[1] + R3_12 * xyz[2]
+    xyz_out[2] = R3_20 * xyz[0] + R3_21 * xyz[1] + R3_22 * xyz[2]
     return xyz_out
 
 
@@ -680,20 +638,22 @@ def ar_scan_rv(
     v_eq, i, coeffs, law, alphaB, alphaC, cb1,
     grid, rv, ccf, ccf_ar, v_interval, n_v,
     s, lon, lat, phase, iminy, iminz, imaxy, imaxz,
-    magn_feature_type,feature_coeffs,feature_law,Tstar, Tdiff, wlll, ar_grid,
+    magn_feature_type, feature_coeffs, feature_law, Tstar, Tdiff, wlll, ar_grid,
     prot, Rp, P, t0, e, w, ip, a, lbda, fe, fi, theta, ir,
+    n_sub,           # <-- new parameter
 ):
     xyzp = planet_position_at_date(phase * prot, P, t0, e, w, ip, a, lbda)
 
     i_rad = i * pi / 180.0
-    delta_grid = 2.0 / grid
+    delta_grid      = 2.0 / grid
     delta_grid_half = delta_grid * 0.5
+    delta_sub       = delta_grid / n_sub       # sub-cell step
+    inv_nsub2       = 1.0 / (n_sub * n_sub)
 
-    wlll = wlll * 1e-10
+    wlll        = wlll * 1e-10
     planck_star = planck_law(wlll, Tstar)
 
-    costheta = cos(theta)
-    sintheta = sin(theta)
+    costheta = cos(theta);  sintheta = sin(theta)
     cosir2   = cos(ir) * cos(ir)
     Rp2      = Rp * Rp
     fe2_Rp2  = fe * fe * Rp2
@@ -706,13 +666,9 @@ def ar_scan_rv(
         T_spot = temperature_spot(Tstar, Tdiff)
         intensity_precomputed = planck_law(wlll, T_spot) / planck_star
 
-    xyzp0 = xyzp[0]
-    xyzp1 = xyzp[1]
-    xyzp2 = xyzp[2]
-
+    xyzp0 = xyzp[0];  xyzp1 = xyzp[1];  xyzp2 = xyzp[2]
     n_rows = imaxy - iminy
 
-    # 2D accumulators: one row per iy — avoids array += reduction in prange
     all_bconv = np.zeros((n_rows, n_v))
     all_flux  = np.zeros((n_rows, n_v))
     all_tot   = np.zeros((n_rows, n_v))
@@ -721,75 +677,97 @@ def ar_scan_rv(
         local_xyza  = np.empty(3)
         local_xyzi  = np.empty(3)
         rv_shifted  = np.empty(n_v)
-        row = iy - iminy  # index into 2D accumulator
+        row = iy - iminy
+        y_cell = -1.0 + iy * delta_grid         # coarse cell corner (not center)
 
         for iz in range(iminz, imaxz):
-
             if ar_grid[iy, iz]:
                 continue
 
-            y = -1.0 + iy * delta_grid + delta_grid_half
-            z = -1.0 + iz * delta_grid + delta_grid_half
+            z_cell = -1.0 + iz * delta_grid
 
-            if z * z + y * y < 1.0:
-                r_cos, limb = ld(y, z, coeffs,law)
+            # --- subgrid accumulation for this coarse cell ---
+            sub_count     = 0
+            sub_bconv     = np.zeros(n_v)
+            sub_flux      = np.zeros(n_v)
+            sub_tot       = np.zeros(n_v)
 
-                dp1 = y - xyzp1
-                dp2 = z - xyzp2
+            for isy in range(n_sub):
+                y  = y_cell + (isy + 0.5) * delta_sub
+                y2 = y * y
 
-                t1 = costheta * dp1 + sintheta * dp2
-                t2 = sintheta * dp1 - costheta * dp2
-                t1_sq = t1 * t1
-                t2_sq_over_cosir2 = t2 * t2 / cosir2
+                for isz in range(n_sub):
+                    z  = z_cell + (isz + 0.5) * delta_sub
+                    z2 = z * z
 
-                a_loc = dp1 * dp1 + dp2 * dp2
+                    if z2 + y2 >= 1.0:
+                        continue
 
-                if Rp != 0.0:
-                    aringin  = t1_sq / fi2_Rp2 + t2_sq_over_cosir2 / fi2_Rp2
-                    aringout = t1_sq / fe2_Rp2 + t2_sq_over_cosir2 / fe2_Rp2
-                else:
-                    aringin  = 0.0
-                    aringout = 1.1
+                    r_cos, limb = ld(y, z, coeffs, law)
 
-                if (
-                    (aringin < 1.0 and a_loc >= Rp2)
-                    or (aringout > 1.0 and a_loc >= Rp2)
-                    or (xyzp0 < 0.0)
-                ):
-                    local_xyza[0] = r_cos
-                    local_xyza[1] = y
-                    local_xyza[2] = z
-                    local_xyzi = ar_inverse_rotation(local_xyza, lon, lat, i, phase)
+                    dp1 = y - xyzp1
+                    dp2 = z - xyzp2
 
-                    if local_xyzi[0] * local_xyzi[0] >= 1.0 - s2:
-                        _,limb_feature= ld(y,z, feature_coeffs, feature_law)
-                        ar_grid[iy, iz] = True
+                    t1 = costheta * dp1 + sintheta * dp2
+                    t2 = sintheta * dp1 - costheta * dp2
+                    t1_sq = t1 * t1
+                    t2_sq_over_cosir2 = t2 * t2 / cosir2
+                    a_loc = dp1 * dp1 + dp2 * dp2
 
-                        delta_quiet = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, cb1)
-                        delta_ar  = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, 0.0)
+                    if Rp != 0.0:
+                        aringin  = t1_sq / fi2_Rp2 + t2_sq_over_cosir2 / fi2_Rp2
+                        aringout = t1_sq / fe2_Rp2 + t2_sq_over_cosir2 / fe2_Rp2
+                    else:
+                        aringin  = 0.0
+                        aringout = 1.1
 
-                        if magn_feature_type == 0:
-                            intensity = intensity_precomputed
-                        else:
-                            T_plage   = temperature_plage(Tstar, Tdiff, r_cos)
-                            intensity = planck_law(wlll, T_plage) / planck_star
+                    if (
+                        (aringin < 1.0 and a_loc >= Rp2)
+                        or (aringout > 1.0 and a_loc >= Rp2)
+                        or (xyzp0 < 0.0)
+                    ):
+                        local_xyza[0] = r_cos
+                        local_xyza[1] = y
+                        local_xyza[2] = z
+                        local_xyzi = ar_inverse_rotation(local_xyza, lon, lat, i, phase)
 
-                        for k in range(n_v):
-                            rv_shifted[k] = rv_vrot[k] - delta_quiet
-                        shifted_quiet = linear_interpolator(rv, ccf, rv_shifted)
+                        if local_xyzi[0] * local_xyzi[0] >= 1.0 - s2:
+                            sub_count += 1
+                            _, limb_feature = ld(y, z, feature_coeffs, feature_law)
 
-                        for k in range(n_v):
-                            rv_shifted[k] = rv_vrot[k] - delta_ar
-                        shifted_ar = linear_interpolator(rv, ccf_ar, rv_shifted)
+                            delta_quiet = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, cb1)
+                            delta_ar    = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, 0.0)
 
-                        for k in range(n_v):
-                            sq_k = shifted_quiet[k]
-                            ss_k = shifted_ar[k]
-                            all_flux [row, k] += sq_k*(limb-limb_feature*intensity)  #sq_k * limb * (1.0 - intensity) # flux missing due to the active region, using the quiet spectrum
-                            all_bconv[row, k] += sq_k*limb-ss_k*limb_feature #(sq_k - ss_k) * limb # RV contribution of the active region, using the difference between quiet and active region spectrum
-                            all_tot  [row, k] += sq_k*limb-intensity*limb_feature*ss_k #(sq_k - intensity * ss_k) * limb # total flux in the cell, using the active region spectrum weighted by the intensity of the active region
+                            if magn_feature_type == 0:
+                                intensity = intensity_precomputed
+                            else:
+                                T_plage   = temperature_plage(Tstar, Tdiff, r_cos)
+                                intensity = planck_law(wlll, T_plage) / planck_star
 
-    # Final reduction — sum over rows (sequential, trivially fast)
+                            for k in range(n_v):
+                                rv_shifted[k] = rv_vrot[k] - delta_quiet
+                            shifted_quiet = linear_interpolator(rv, ccf, rv_shifted)
+
+                            for k in range(n_v):
+                                rv_shifted[k] = rv_vrot[k] - delta_ar
+                            shifted_ar = linear_interpolator(rv, ccf_ar, rv_shifted)
+
+                            for k in range(n_v):
+                                sq_k = shifted_quiet[k]
+                                ss_k = shifted_ar[k]
+                                sub_flux [k] += sq_k * (limb - limb_feature * intensity)
+                                sub_bconv[k] += sq_k * limb - ss_k * limb_feature
+                                sub_tot  [k] += sq_k * limb - intensity * limb_feature * ss_k
+
+            # --- merge into row accumulator (weighted average) ---
+            if sub_count > 0:
+                ar_grid[iy, iz] = True          # mark coarse cell as hit
+                for k in range(n_v):
+                    all_flux [row, k] += sub_flux [k] * inv_nsub2
+                    all_bconv[row, k] += sub_bconv[k] * inv_nsub2
+                    all_tot  [row, k] += sub_tot  [k] * inv_nsub2
+
+    # Final sequential reduction
     f_ar_bconv = np.zeros(n_v)
     f_ar_flux  = np.zeros(n_v)
     f_ar_tot   = np.zeros(n_v)
@@ -817,304 +795,233 @@ def temperature_plage(Tstar, Tdiff, r_cos):
 
 @numba.njit(cache=True, nopython=True)
 def ar_scan_flux(
-    i,
-    coeffs,
-    law,
-    grid,
-    s,
-    lon,
-    lat,
-    phase,
-    iminy,
-    iminz,
-    imaxy,
-    imaxz,
-    magn_feature_type,
-    feature_coeffs,
-    feature_law,
-    Tstar,
-    Tdiff,
-    wlll,
-    ar_grid,
-    prot,
-    Rp,
-    P,
-    t0,
-    e,
-    w,
-    ip,
-    a,
-    lbda,
-    fe,
-    fi,
-    theta,
-    ir,
+    i, coeffs, law, grid, s, lon, lat, phase,
+    iminy, iminz, imaxy, imaxz,
+    magn_feature_type, feature_coeffs, feature_law,
+    Tstar, Tdiff, wlll, ar_grid,
+    prot, Rp, P, t0, e, w, ip, a, lbda,
+    fe, fi, theta, ir,
+    n_sub,           # <-- new parameter
 ):
-    """
-    Scan of the yz-area where the AR is.
-    For each grid point (y,z) we need to check whether it belongs to the active region
-    or not. Sadly, we do not know the projected geometry of the active region in its
-    actual position. Thus, we have to do an inverse rotation to replace the
-    grid point where it would be in the initial configuration. Indeed, in the
-    initial configuration, the active region has a well known geometry of a circle
-    centered on the x-axis.
-    """
-
     xyzp = planet_position_at_date(phase * prot, P, t0, e, w, ip, a, lbda)
     wlll = wlll * 1e-10
     delta_grid = 2.0 / grid
+    delta_sub  = delta_grid / n_sub
+    inv_nsub2  = 1.0 / (n_sub * n_sub)
 
     planck_star = planck_law(wlll, Tstar)
-    # print(planck_star)
-    # xyza # actual coordinates
-    # xyzi # coordinates transformed back to the initial configuration
-    xyza = np.empty(3)
+
+    xyza = np.empty(3)      # still used, but overwritten per sub-point
     xyzi = np.empty(3)
 
     sum_ar = 0.0
 
-    # Constant quantities
-    costheta = cos(theta)
-    sintheta = sin(theta)
-    cosir2 = pow(cos(ir), 2)
-    Rp2 = pow(Rp, 2)
-    fe2_Rp2 = pow(fe, 2) * Rp2
-    fi2_Rp2 = pow(fi, 2) * Rp2
+    costheta = cos(theta);  sintheta = sin(theta)
+    cosir2   = pow(cos(ir), 2)
+    Rp2      = pow(Rp, 2)
+    fe2_Rp2  = pow(fe, 2) * Rp2
+    fi2_Rp2  = pow(fi, 2) * Rp2
+    s2       = s * s
 
-    # Scan of each cell on the grid
     for iy in range(iminy, imaxy):
-        y = -1.0 + iy * delta_grid+delta_grid/2  # y between -1 et 1
-        xyza[1] = y
+        y_cell = -1.0 + iy * delta_grid        # coarse cell corner
 
         for iz in range(iminz, imaxz):
             if ar_grid[iy, iz]:
                 continue
 
-            z = -1.0 + iz * delta_grid+delta_grid/2 # z between -1 et 1
+            z_cell = -1.0 + iz * delta_grid
 
-            if z * z + y * y < 1.0:
-                # sqrt(r^2 - (y^2+z^2)) where r=1.
-                # This is equal to 1 at the disc center, and 0 on the limb.
-                # Often referred in the literature as cos(theta)
-                r_cos, limb = ld(y, z, coeffs,law)
+            sub_sum   = 0.0
+            sub_count = 0
 
-                xyza[2] = z
-                xyza[0] = r_cos
+            for isy in range(n_sub):
+                y = y_cell + (isy + 0.5) * delta_sub
+                xyza[1] = y
 
-                dp1 = xyza[1] - xyzp[1]
-                dp2 = xyza[2] - xyzp[2]
+                for isz in range(n_sub):
+                    z = z_cell + (isz + 0.5) * delta_sub
 
-                costheta_dp1 = costheta * dp1
-                costheta_dp2 = costheta * dp2
-                sintheta_dp1 = sintheta * dp1
-                sintheta_dp2 = sintheta * dp2
+                    if z * z + y * y >= 1.0:
+                        continue
 
-                # Check if the planet is in-front off the active region
-                a = dp1**2.0 + dp2**2.0
-                if Rp != 0:
-                    aringin = (costheta_dp1 + sintheta_dp2) ** 2 / fi2_Rp2 + (
-                        (sintheta_dp1 - costheta_dp2) ** 2 / (cosir2 * fi2_Rp2)
-                    )
+                    r_cos, limb = ld(y, z, coeffs, law)
 
-                    aringout = (costheta_dp1 + sintheta_dp2) ** 2 / fe2_Rp2 + (
-                        (sintheta_dp1 - costheta_dp2) ** 2 / (cosir2 * fe2_Rp2)
-                    )
-                else:
-                    aringin = 0
-                    aringout = 1.1
+                    xyza[0] = r_cos
+                    xyza[2] = z
 
-                if (
-                    ((aringin < 1) and (a >= Rp2))
-                    or ((aringout > 1) and (a >= Rp2))
-                    or (xyzp[0] < 0.0)
-                ):
+                    dp1 = y      - xyzp[1]
+                    dp2 = z      - xyzp[2]
 
-                    # Rotate the star so that the active region is on the disc center
-                    xyzi = ar_inverse_rotation(xyza, lon, lat, i, phase)
+                    costheta_dp1 = costheta * dp1
+                    costheta_dp2 = costheta * dp2
+                    sintheta_dp1 = sintheta * dp1
+                    sintheta_dp2 = sintheta * dp2
 
-                    # if inside the active region when scanning the grid
-                    if xyzi[0] ** 2 >= 1.0 - s**2:
-                        ar_grid[iy, iz] = True
-                        _,limb_feature= ld(y,z, feature_coeffs, feature_law)
+                    a_loc = dp1 * dp1 + dp2 * dp2
 
-                        if magn_feature_type == 0:
-                            # intensity of the spot
-                            T_spot = temperature_spot(Tstar, Tdiff)
-                            intensity = planck_law(wlll, T_spot) / planck_star
+                    if Rp != 0.0:
+                        aringin  = (costheta_dp1 + sintheta_dp2) ** 2 / fi2_Rp2 + \
+                                   (sintheta_dp1 - costheta_dp2) ** 2 / (cosir2 * fi2_Rp2)
+                        aringout = (costheta_dp1 + sintheta_dp2) ** 2 / fe2_Rp2 + \
+                                   (sintheta_dp1 - costheta_dp2) ** 2 / (cosir2 * fe2_Rp2)
+                    else:
+                        aringin  = 0.0
+                        aringout = 1.1
 
-                        else:
-                            # plages are brighter on the limb (e.g. Meunier 2010)
-                            T_plage = temperature_plage(Tstar, Tdiff, r_cos)
-                            intensity = planck_law(wlll, T_plage) / planck_star
-                            # print(planck_law(wlll, T_plage))
+                    if (
+                        (aringin < 1.0 and a_loc >= Rp2)
+                        or (aringout > 1.0 and a_loc >= Rp2)
+                        or (xyzp[0] < 0.0)
+                    ):
+                        xyzi = ar_inverse_rotation(xyza, lon, lat, i, phase)
 
-                        # calculates the "non contributing" total flux of the active
-                        # region taking into account the limb-darkening and the
-                        # active region intensity
-                        sum_ar += limb - limb_feature*intensity
+                        if xyzi[0] * xyzi[0] >= 1.0 - s2:
+                            sub_count += 1
+                            _, limb_feature = ld(y, z, feature_coeffs, feature_law)
+
+                            if magn_feature_type == 0:
+                                T_spot    = temperature_spot(Tstar, Tdiff)
+                                intensity = planck_law(wlll, T_spot) / planck_star
+                            else:
+                                T_plage   = temperature_plage(Tstar, Tdiff, r_cos)
+                                intensity = planck_law(wlll, T_plage) / planck_star
+
+                            sub_sum += limb - limb_feature * intensity
+
+            # Accumulate weighted contribution
+            if sub_count > 0:
+                ar_grid[iy, iz] = True
+                sum_ar += sub_sum * inv_nsub2
 
     return sum_ar
 
 
 @numba.njit(cache=True, nopython=True)
 def ar_scan_spectrum(
-    v_eq,
-    i,
-    coeffs,
-    law,
-    alphaB,
-    alphaC,
-    cb1,
-    grid,
-    pixel,
-    pixel_ar,
-    s,
-    lon,
-    lat,
-    phase,
-    iminy,
-    iminz,
-    imaxy,
-    imaxz,
-    magn_feature_type,
-    feature_coeffs,
-    feature_law,
-    Tstar,
-    Tdiff,
-    wlll,
-    ar_grid,
-    prot,
-    Rp,
-    P,
-    t0,
-    e,
-    w,
-    ip,
-    a,
-    lbda,
-    fe,
-    fi,
-    theta,
-    ir,
+    v_eq, i, coeffs, law, alphaB, alphaC, cb1,
+    grid, pixel, pixel_ar,
+    s, lon, lat, phase, iminy, iminz, imaxy, imaxz,
+    magn_feature_type, feature_coeffs, feature_law,
+    Tstar, Tdiff, wlll, ar_grid,
+    prot, Rp, P, t0, e, w, ip, a, lbda,
+    fe, fi, theta, ir,
+    n_sub,              # <-- new parameter
 ):
-    """
-    Scan of the yz-area where the active region is.
-    For each grid point (y,z) we need to check whether it belongs to the active region
-    or not. Sadly, we do not know the projected geometry of the active region in its
-    actual position. Thus, we have to do an inverse rotation to replace the
-    grid point where it would be in the initial configuration. Indeed, in the
-    initial configuration, the active region has a well known geometry of a circle
-    centered on the x-axis.
-    """
-
     xyzp = planet_position_at_date(phase * prot, P, t0, e, w, ip, a, lbda)
 
-    i_rad = i * pi / 180.0  # [degree] --> [radian]
-
-    # step of the grid. grid goes from -1 to 1, therefore 2 in total
+    i_rad = i * pi / 180.0
     delta_grid = 2.0 / grid
-    # v_interval is from the velocity 0 to the edge of the spectrum taking into
-    # account minimal or maximal rotation (width - v to 0 or 0 to width + v).
-    # n_v is the number of points for all the CCF from minimum rotation to
-    # maximum one (from width - v to width + v). n_v represent therefore the
-    # double than v_interval, we therefore have to multiply v_interval by 2.
+    delta_sub  = delta_grid / n_sub
+    inv_nsub2  = 1.0 / (n_sub * n_sub)
 
-    wlll = wlll * 1e-10
+    wlll        = wlll * 1e-10
     planck_star = planck_law(wlll, Tstar)
 
-    # xyza # actual coordinates
-    # xyzi # coordinates transformed back to the initial configuration
     xyza = np.empty(3)
     xyzi = np.empty(3)
 
-    f_ar_bconv = np.zeros_like(pixel.wave, dtype=np.float64)
-    f_ar_flux = np.zeros_like(pixel.wave, dtype=np.float64)
-    f_ar_tot = np.zeros_like(pixel.wave, dtype=np.float64)
+    nw = len(pixel.wave)
+    f_ar_bconv = np.zeros(nw)
+    f_ar_flux  = np.zeros(nw)
+    f_ar_tot   = np.zeros(nw)
 
-    # Constant quantities
-    costheta = cos(theta)
-    sintheta = sin(theta)
-    cosir2 = pow(cos(ir), 2)
-    Rp2 = pow(Rp, 2)
-    fe2_Rp2 = pow(fe, 2) * Rp2
-    fi2_Rp2 = pow(fi, 2) * Rp2
+    costheta = cos(theta);  sintheta = sin(theta)
+    cosir2   = pow(cos(ir), 2)
+    Rp2      = pow(Rp, 2)
+    fe2_Rp2  = pow(fe, 2) * Rp2
+    fi2_Rp2  = pow(fi, 2) * Rp2
+    s2       = s * s
 
-    # Scan of each cell on the grid
-    for iy in range(iminy, imaxy):
+    # Hoist spot intensity precomputation (same as ar_scan_flux)
+    if magn_feature_type == 0:
+        T_spot           = temperature_spot(Tstar, Tdiff)
+        intensity_spot   = planck_law(wlll, T_spot) / planck_star
+
+    for iy in prange(iminy, imaxy):
+        y_cell = -1.0 + iy * delta_grid        # coarse cell corner
+
         for iz in range(iminz, imaxz):
-
             if ar_grid[iy, iz]:
                 continue
 
-            y = -1.0 + iy * delta_grid+delta_grid/2  # y between -1 et 1
-            z = -1.0 + iz *delta_grid+ delta_grid/2  # z between -1 et 1
+            z_cell = -1.0 + iz * delta_grid
 
-            # projected radius on the sky smaller than 1: we are on the stellar
-            # disc
-            if z * z + y * y < 1.0:
-                r_cos, limb = ld(y, z, coeffs,law)
+            sub_bconv = np.zeros(nw)
+            sub_flux  = np.zeros(nw)
+            sub_tot   = np.zeros(nw)
+            sub_count = 0
 
-                dp1 = y - xyzp[1]
-                dp2 = z - xyzp[2]
+            for isy in range(n_sub):
+                y = y_cell + (isy + 0.5) * delta_sub
+                y2 = y * y
 
-                costheta_dp1 = costheta * dp1
-                costheta_dp2 = costheta * dp2
-                sintheta_dp1 = sintheta * dp1
-                sintheta_dp2 = sintheta * dp2
+                for isz in range(n_sub):
+                    z = z_cell + (isz + 0.5) * delta_sub
+                    z2 = z * z
 
-                # Check if the planet is in-front off the active region
-                a = dp1**2.0 + dp2**2.0
+                    if z2 + y2 >= 1.0:
+                        continue
 
-                if Rp != 0:
-                    aringin = (costheta_dp1 + sintheta_dp2) ** 2 / fi2_Rp2 + (
-                        (sintheta_dp1 - costheta_dp2) ** 2 / (cosir2 * fi2_Rp2)
-                    )
+                    r_cos, limb = ld(y, z, coeffs, law)
 
-                    aringout = (costheta_dp1 + sintheta_dp2) ** 2 / fe2_Rp2 + (
-                        (sintheta_dp1 - costheta_dp2) ** 2 / (cosir2 * fe2_Rp2)
-                    )
-                else:
-                    aringin = 0
-                    aringout = 1.1
+                    dp1 = y - xyzp[1]
+                    dp2 = z - xyzp[2]
 
-                if (
-                    ((aringin < 1) and (a >= Rp2))
-                    or ((aringout > 1) and (a >= Rp2))
-                    or (xyzp[0] < 0.0)
-                ):
-                    xyza = np.array([r_cos, y, z])
-                    # xyza --> xyzi:
-                    # Rotate the star so that the active region is on the disc center
-                    xyzi = ar_inverse_rotation(xyza, lon, lat, i, phase)
+                    costheta_dp1 = costheta * dp1
+                    costheta_dp2 = costheta * dp2
+                    sintheta_dp1 = sintheta * dp1
+                    sintheta_dp2 = sintheta * dp2
 
-                    # if inside the active region when scanning the grid
-                    if xyzi[0] ** 2 >= 1.0 - s**2:
-                        _,limb_feature= ld(y,z, feature_coeffs, feature_law)
+                    a_loc = dp1 * dp1 + dp2 * dp2
 
-                        ar_grid[iy, iz] = True
+                    if Rp != 0.0:
+                        aringin  = (costheta_dp1 + sintheta_dp2) ** 2 / fi2_Rp2 + \
+                                   (sintheta_dp1 - costheta_dp2) ** 2 / (cosir2 * fi2_Rp2)
+                        aringout = (costheta_dp1 + sintheta_dp2) ** 2 / fe2_Rp2 + \
+                                   (sintheta_dp1 - costheta_dp2) ** 2 / (cosir2 * fe2_Rp2)
+                    else:
+                        aringin  = 0.0
+                        aringout = 1.1
 
-                        delta_quiet = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, cb1)
-                        # We have inhibition of convective blueshift on the active region, as such cb1=0
-                        delta_ar = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, 0)
-                        if magn_feature_type == 0:
-                            # intensity of the spot
-                            T_spot = temperature_spot(Tstar, Tdiff)
-                            intensity = planck_law(wlll, T_spot) / planck_star
-                        else:
-                            # plages are brighter on the limb (e.g. Meunier 2010)
-                            T_plage = temperature_plage(Tstar, Tdiff, r_cos)
-                            intensity = planck_law(wlll, T_plage) / planck_star
+                    if (
+                        (aringin < 1.0 and a_loc >= Rp2)
+                        or (aringout > 1.0 and a_loc >= Rp2)
+                        or (xyzp[0] < 0.0)
+                    ):
+                        xyza[0] = r_cos
+                        xyza[1] = y
+                        xyza[2] = z
+                        xyzi = ar_inverse_rotation(xyza, lon, lat, i, phase)
 
-                        shifted_quiet = doppler_shift(
-                            pixel.wave, pixel.flux(r_cos), delta_quiet * 1e3
-                        )
-                        shifted_ar = doppler_shift(
-                            pixel.wave, pixel_ar.flux(r_cos), delta_ar * 1e3
-                        )
+                        if xyzi[0] * xyzi[0] >= 1.0 - s2:
+                            sub_count += 1
+                            _, limb_feature = ld(y, z, feature_coeffs, feature_law)
 
-                        f_ar_flux += shifted_quiet*(limb-limb_feature*intensity) 
-                        f_ar_bconv += shifted_quiet*limb-shifted_ar*limb_feature
-                        f_ar_tot += shifted_quiet*limb-intensity*limb_feature*shifted_ar
+                            delta_quiet = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, cb1)
+                            delta_ar    = vrot(v_eq, r_cos, y, z, alphaB, alphaC, i_rad, 0.0)
+
+                            if magn_feature_type == 0:
+                                intensity = intensity_spot       # hoisted above
+                            else:
+                                T_plage   = temperature_plage(Tstar, Tdiff, r_cos)
+                                intensity = planck_law(wlll, T_plage) / planck_star
+
+                            shifted_quiet = doppler_shift(
+                                pixel.wave, pixel.flux(r_cos), delta_quiet * 1e3)
+                            shifted_ar = doppler_shift(
+                                pixel.wave, pixel_ar.flux(r_cos), delta_ar * 1e3)
+
+                            sub_flux  += shifted_quiet * (limb - limb_feature * intensity)
+                            sub_bconv += shifted_quiet * limb - shifted_ar * limb_feature
+                            sub_tot   += shifted_quiet * limb - intensity * limb_feature * shifted_ar
+
+            # Accumulate weighted cell contribution
+            if sub_count > 0:
+                ar_grid[iy, iz] = True
+                f_ar_flux  += sub_flux  * inv_nsub2
+                f_ar_bconv += sub_bconv * inv_nsub2
+                f_ar_tot   += sub_tot   * inv_nsub2
 
     return f_ar_bconv, f_ar_flux, f_ar_tot
 
@@ -1133,6 +1040,7 @@ def active_region_contributions(
     ring,
     ccf=True,
     skip_rv=False,
+    n_sub=1
 ):
     npsi: int = len(psi)
     flux_ar = np.zeros(npsi)
@@ -1207,6 +1115,7 @@ def active_region_contributions(
                     ring.fi,
                     ring.theta,
                     ring.ir,
+                    n_sub
                 )
                 flux_ar[j] += S
 
@@ -1257,6 +1166,7 @@ def active_region_contributions(
                         ring.fi,
                         ring.theta,
                         ring.ir,
+                        n_sub
                     )
                 else:
                     bconv, flux, tot = ar_scan_spectrum(
@@ -1298,6 +1208,7 @@ def active_region_contributions(
                         ring.fi,
                         ring.theta,
                         ring.ir,
+                        n_sub
                     )
 
                 pixel_bconv[j] += bconv
@@ -1561,90 +1472,255 @@ def planet_area(xyz, grid, Rp, fe):
 
 
 # ---------------------------------------------------------------------------------------------
+# @numba.njit(cache=True, nopython=True)
+# def planet_scan_rv(
+#     v: float64,
+#     i: float64,
+#     limba1: float64,
+#     limba2: float64,
+#     grid: int,
+#     rv: np.ndarray,
+#     ccf: np.ndarray,
+#     v_interval: float64,
+#     n_v: int,
+#     N: int,
+#     iminy: int,
+#     iminz: int,
+#     imaxy: int,
+#     imaxz: int,
+#     dp1: float64,
+#     dp2: float64,
+#     Rp: float64,
+#     fe: float64,
+#     fi: float64,
+#     theta: float64,
+#     ir: float64,
+#     calc_rv: int,
+#     alphaB: float64,
+#     alphaC: float64,
+#     cb1: float64,
+# ) -> np.ndarray:
+#     # Initialize parameters
+#     delta_grid = 2.0 / grid
+#     delta_v = 2.0 * v_interval / n_v
+#     f_planet = np.zeros(n_v + 1)
+#     ccf_shifted = np.zeros(N)
+#     sum_planet = 0.0
+
+#     # Precompute constants
+#     costheta = cos(theta)
+#     sintheta = sin(theta)
+#     cosir2 = cos(ir) ** 2
+#     Rp2 = Rp**2
+#     fe2_Rp2 = fe**2 * Rp2
+#     fi2_Rp2 = fi**2 * Rp2
+#     rv_vrot = np.linspace(-v_interval, v_interval, n_v)
+
+#     # Iterate over the grid
+#     for iy in range(iminy, imaxy):
+#         y = -1.0 + iy * delta_grid+delta_grid/2
+#         y2 = y**2
+
+#         for iz in range(iminz, imaxz):
+#             z = -1.0 + iz * delta_grid+delta_grid/2
+#             z2 = z**2
+
+#             xdp1 = y - dp1
+#             xdp2 = z - dp2
+
+#             costheta_xdp1 = costheta * xdp1
+#             costheta_xdp2 = costheta * xdp2
+#             sintheta_xdp1 = sintheta * xdp1
+#             sintheta_xdp2 = sintheta * xdp2
+
+#             term1 = (costheta_xdp1 + sintheta_xdp2) ** 2 / fi2_Rp2
+#             term2 = (sintheta_xdp1 - costheta_xdp2) ** 2 / (cosir2 * fi2_Rp2)
+#             term3 = (costheta_xdp1 + sintheta_xdp2) ** 2 / fe2_Rp2
+#             term4 = (sintheta_xdp1 - costheta_xdp2) ** 2 / (cosir2 * fe2_Rp2)
+
+#             if (
+#                 (term1 + term2 > 1.0 and term3 + term4 <= 1.0)
+#                 or (xdp1**2 + xdp2**2 <= Rp2)
+#             ) and (y2 + z2 <= 1.0):
+#                 r_cos, limb = ld(y, z, limba1, limba2)
+#                 sum_planet += limb
+
+#                 if calc_rv == 1:
+#                     latitude = z * sin(i) + r_cos * cos(i)
+#                     delta = vrot(v, r_cos, y, z, alphaB, alphaC, i, cb1)
+#                     f_planet += linear_interpolator(rv, ccf, rv_vrot - delta) * limb
+
+#     # Set the final value
+#     f_planet[-1] = sum_planet
+
+#     return f_planet
 @numba.njit(cache=True, nopython=True)
 def planet_scan_rv(
-    v: float64,
-    i: float64,
-    limba1: float64,
-    limba2: float64,
-    grid: int,
-    rv: np.ndarray,
-    ccf: np.ndarray,
-    v_interval: float64,
-    n_v: int,
-    N: int,
-    iminy: int,
-    iminz: int,
-    imaxy: int,
-    imaxz: int,
-    dp1: float64,
-    dp2: float64,
-    Rp: float64,
-    fe: float64,
-    fi: float64,
-    theta: float64,
-    ir: float64,
-    calc_rv: int,
-    alphaB: float64,
-    alphaC: float64,
-    cb1: float64,
+    v, i, limba1, limba2, grid, rv, ccf, v_interval,
+    n_v, N, iminy, iminz, imaxy, imaxz,
+    dp1, dp2, Rp, fe, fi, theta, ir, calc_rv,
+    alphaB, alphaC, cb1,
+    n_sub: int = 1,          # <-- new parameter
 ) -> np.ndarray:
-    # Initialize parameters
+
     delta_grid = 2.0 / grid
-    delta_v = 2.0 * v_interval / n_v
+    delta_sub  = delta_grid / n_sub      # sub-cell step
+    delta_v    = 2.0 * v_interval / n_v
+
     f_planet = np.zeros(n_v + 1)
-    ccf_shifted = np.zeros(N)
     sum_planet = 0.0
 
-    # Precompute constants
     costheta = cos(theta)
     sintheta = sin(theta)
-    cosir2 = cos(ir) ** 2
-    Rp2 = Rp**2
-    fe2_Rp2 = fe**2 * Rp2
-    fi2_Rp2 = fi**2 * Rp2
-    rv_vrot = np.linspace(-v_interval, v_interval, n_v)
+    cosir2   = cos(ir) ** 2
+    Rp2      = Rp ** 2
+    fe2_Rp2  = fe ** 2 * Rp2
+    fi2_Rp2  = fi ** 2 * Rp2
+    rv_vrot  = np.linspace(-v_interval, v_interval, n_v)
+    inv_nsub2 = 1.0 / (n_sub * n_sub)
 
-    # Iterate over the grid
     for iy in range(iminy, imaxy):
-        y = -1.0 + iy * delta_grid+delta_grid/2
-        y2 = y**2
+        y_cell = -1.0 + iy * delta_grid          # coarse cell corner
 
         for iz in range(iminz, imaxz):
-            z = -1.0 + iz * delta_grid+delta_grid/2
-            z2 = z**2
+            z_cell = -1.0 + iz * delta_grid
 
-            xdp1 = y - dp1
-            xdp2 = z - dp2
+            sub_limb = 0.0
+            sub_f    = np.zeros(n_v + 1)
 
-            costheta_xdp1 = costheta * xdp1
-            costheta_xdp2 = costheta * xdp2
-            sintheta_xdp1 = sintheta * xdp1
-            sintheta_xdp2 = sintheta * xdp2
+            for isy in range(n_sub):
+                y  = y_cell + (isy + 0.5) * delta_sub
+                y2 = y * y
 
-            term1 = (costheta_xdp1 + sintheta_xdp2) ** 2 / fi2_Rp2
-            term2 = (sintheta_xdp1 - costheta_xdp2) ** 2 / (cosir2 * fi2_Rp2)
-            term3 = (costheta_xdp1 + sintheta_xdp2) ** 2 / fe2_Rp2
-            term4 = (sintheta_xdp1 - costheta_xdp2) ** 2 / (cosir2 * fe2_Rp2)
+                for isz in range(n_sub):
+                    z  = z_cell + (isz + 0.5) * delta_sub
+                    z2 = z * z
 
-            if (
-                (term1 + term2 > 1.0 and term3 + term4 <= 1.0)
-                or (xdp1**2 + xdp2**2 <= Rp2)
-            ) and (y2 + z2 <= 1.0):
-                r_cos, limb = ld(y, z, limba1, limba2)
-                sum_planet += limb
+                    xdp1 = y - dp1
+                    xdp2 = z - dp2
 
-                if calc_rv == 1:
-                    latitude = z * sin(i) + r_cos * cos(i)
-                    delta = vrot(v, r_cos, y, z, alphaB, alphaC, i, cb1)
-                    f_planet += linear_interpolator(rv, ccf, rv_vrot - delta) * limb
+                    costheta_xdp1 = costheta * xdp1
+                    costheta_xdp2 = costheta * xdp2
+                    sintheta_xdp1 = sintheta * xdp1
+                    sintheta_xdp2 = sintheta * xdp2
 
-    # Set the final value
+                    term1 = (costheta_xdp1 + sintheta_xdp2) ** 2 / fi2_Rp2
+                    term2 = (sintheta_xdp1 - costheta_xdp2) ** 2 / (cosir2 * fi2_Rp2)
+                    term3 = (costheta_xdp1 + sintheta_xdp2) ** 2 / fe2_Rp2
+                    term4 = (sintheta_xdp1 - costheta_xdp2) ** 2 / (cosir2 * fe2_Rp2)
+
+                    if (
+                        (term1 + term2 > 1.0 and term3 + term4 <= 1.0)
+                        or (xdp1 ** 2 + xdp2 ** 2 <= Rp2)
+                    ) and (y2 + z2 <= 1.0):
+                        r_cos, limb = ld(y, z, limba1, limba2)
+                        sub_limb += limb
+
+                        if calc_rv == 1:
+                            delta  = vrot(v, r_cos, y, z, alphaB, alphaC, i, cb1)
+                            sub_f[:-1] += linear_interpolator(rv, ccf, rv_vrot - delta) * limb
+
+            # Accumulate cell's averaged contribution
+            if sub_limb > 0.0:
+                sum_planet    += sub_limb * inv_nsub2
+                f_planet      += sub_f    * inv_nsub2
+
     f_planet[-1] = sum_planet
-
     return f_planet
 
+# @numba.njit(cache=True, nopython=True)
+# def planet_scan_spectrum(
+#     v: float64,
+#     i: float64,
+#     coeffs: numba.float64[:],
+#     law: int,
+#     grid: int,
+#     wave: np.ndarray,
+#     pixel,
+#     n_v: int,
+#     N: int,
+#     iminy: int,
+#     iminz: int,
+#     imaxy: int,
+#     imaxz: int,
+#     dp1: float64,
+#     dp2: float64,
+#     Rp: float64,
+#     fe: float64,
+#     fi: float64,
+#     theta: float64,
+#     ir: float64,
+#     calc_rv: int,
+#     alphaB: float64,
+#     alphaC: float64,
+#     cb1: float64,
+# ) -> np.ndarray:
+#     # Scan of the yz-area where the planet is.
+#     # For each grid-point_t (y,z) we need to check whether it belongs to the planet
+#     # or not.
 
+#     delta_grid = 2.0 / grid
+
+#     f_planet = np.zeros(len(wave) + 1)
+
+#     sum_planet = 0
+
+#     # Constant quantities (assuming that the rv array has a constant step)
+#     diff_CCF_non_v_and_v = int((n_v - N) / 2)
+
+#     costheta = cos(theta)
+#     sintheta = sin(theta)
+#     cosir2 = pow(cos(ir), 2)
+#     Rp2 = pow(Rp, 2)
+#     fe2_Rp2 = pow(fe, 2) * Rp2
+#     fi2_Rp2 = pow(fi, 2) * Rp2
+
+#     # Scan of each cell on the grid
+#     for iy in prange(iminy, imaxy):
+#         y = -1.0 + iy * delta_grid+ delta_grid/2 # y between -1 et 1
+#         y2 = pow(y, 2)
+#         for iz in range(iminz, imaxz):
+#             z = -1.0 + iz * delta_grid+ delta_grid/2  # z between -1 et 1
+#             z2 = pow(z, 2)
+
+#             xdp1 = y - dp1
+#             xdp2 = z - dp2
+
+#             costheta_xdp1 = costheta * xdp1
+#             costheta_xdp2 = costheta * xdp2
+#             sintheta_xdp1 = sintheta * xdp1
+#             sintheta_xdp2 = sintheta * xdp2
+
+#             if (
+#                 (
+#                     (
+#                         (costheta_xdp1 + sintheta_xdp2) ** 2.0 / (fi2_Rp2)
+#                         + (sintheta_xdp1 - costheta_xdp2) ** 2.0 / (cosir2 * fi2_Rp2)
+#                     )
+#                     > 1
+#                     and (
+#                         (
+#                             (costheta_xdp1 + sintheta_xdp2) ** 2.0 / (fe2_Rp2)
+#                             + (sintheta_xdp1 - costheta_xdp2) ** 2.0
+#                             / (cosir2 * fe2_Rp2)
+#                         )
+#                         <= 1
+#                     )
+#                 )
+#                 or (xdp1**2.0 + xdp2**2.0) <= Rp2
+#             ) and (y**2.0 + z**2.0) <= 1:
+#                 r_cos, limb = ld(y, z,coeffs,law)
+#                 sum_planet += limb
+
+#                 if calc_rv == 1:
+
+#                     latitude = z * sin(i) + r_cos * cos(i)
+#                     delta = vrot(v, r_cos, y, z, alphaB, alphaC, i, cb1)
+#                     shifted_quiet = doppler_shift(
+#                             pixel.wave, pixel.flux(r_cos), delta* 1e3)
+#                     f_planet += shifted_quiet * limb
+#     f_planet[-1] = sum_planet
+#     return f_planet
 @numba.njit(cache=True, nopython=True)
 def planet_scan_spectrum(
     v: float64,
@@ -1671,20 +1747,18 @@ def planet_scan_spectrum(
     alphaB: float64,
     alphaC: float64,
     cb1: float64,
+    n_sub: int = 1
 ) -> np.ndarray:
     # Scan of the yz-area where the planet is.
     # For each grid-point_t (y,z) we need to check whether it belongs to the planet
     # or not.
-
     delta_grid = 2.0 / grid
+    delta_sub = delta_grid / n_sub          # sub-cell size
 
     f_planet = np.zeros(len(wave) + 1)
+    sum_planet = 0.0
 
-    sum_planet = 0
-
-    # Constant quantities (assuming that the rv array has a constant step)
     diff_CCF_non_v_and_v = int((n_v - N) / 2)
-
     costheta = cos(theta)
     sintheta = sin(theta)
     cosir2 = pow(cos(ir), 2)
@@ -1692,53 +1766,59 @@ def planet_scan_spectrum(
     fe2_Rp2 = pow(fe, 2) * Rp2
     fi2_Rp2 = pow(fi, 2) * Rp2
 
-    # Scan of each cell on the grid
     for iy in prange(iminy, imaxy):
-        y = -1.0 + iy * delta_grid+ delta_grid/2 # y between -1 et 1
-        y2 = pow(y, 2)
+        y_cell = -1.0 + iy * delta_grid     # cell bottom-left corner
         for iz in range(iminz, imaxz):
-            z = -1.0 + iz * delta_grid+ delta_grid/2  # z between -1 et 1
-            z2 = pow(z, 2)
+            z_cell = -1.0 + iz * delta_grid
 
-            xdp1 = y - dp1
-            xdp2 = z - dp2
+            sub_count = 0
+            sub_limb  = 0.0
+            sub_f     = np.zeros(len(wave) + 1)
 
-            costheta_xdp1 = costheta * xdp1
-            costheta_xdp2 = costheta * xdp2
-            sintheta_xdp1 = sintheta * xdp1
-            sintheta_xdp2 = sintheta * xdp2
+            for isy in range(n_sub):
+                y = y_cell + (isy + 0.5) * delta_sub   # sub-cell center
+                y2 = y * y
+                for isz in range(n_sub):
+                    z = z_cell + (isz + 0.5) * delta_sub
+                    z2 = z * z
 
-            if (
-                (
-                    (
-                        (costheta_xdp1 + sintheta_xdp2) ** 2.0 / (fi2_Rp2)
-                        + (sintheta_xdp1 - costheta_xdp2) ** 2.0 / (cosir2 * fi2_Rp2)
-                    )
-                    > 1
-                    and (
+                    xdp1 = y - dp1
+                    xdp2 = z - dp2
+                    costheta_xdp1 = costheta * xdp1
+                    costheta_xdp2 = costheta * xdp2
+                    sintheta_xdp1 = sintheta * xdp1
+                    sintheta_xdp2 = sintheta * xdp2
+
+                    in_planet = (
                         (
-                            (costheta_xdp1 + sintheta_xdp2) ** 2.0 / (fe2_Rp2)
-                            + (sintheta_xdp1 - costheta_xdp2) ** 2.0
-                            / (cosir2 * fe2_Rp2)
-                        )
-                        <= 1
-                    )
-                )
-                or (xdp1**2.0 + xdp2**2.0) <= Rp2
-            ) and (y**2.0 + z**2.0) <= 1:
-                r_cos, limb = ld(y, z,coeffs,law)
-                sum_planet += limb
+                            (costheta_xdp1 + sintheta_xdp2)**2.0 / fi2_Rp2
+                            + (sintheta_xdp1 - costheta_xdp2)**2.0 / (cosir2 * fi2_Rp2)
+                        ) > 1
+                        and (
+                            (costheta_xdp1 + sintheta_xdp2)**2.0 / fe2_Rp2
+                            + (sintheta_xdp1 - costheta_xdp2)**2.0 / (cosir2 * fe2_Rp2)
+                        ) <= 1
+                    ) or (xdp1**2.0 + xdp2**2.0) <= Rp2
 
-                if calc_rv == 1:
+                    if in_planet and (y2 + z2) <= 1.0:
+                        r_cos, limb = ld(y, z, coeffs, law)
+                        sub_limb += limb
+                        sub_count += 1
 
-                    latitude = z * sin(i) + r_cos * cos(i)
-                    delta = vrot(v, r_cos, y, z, alphaB, alphaC, i, cb1)
-                    shifted_quiet = doppler_shift(
-                            pixel.wave, pixel.flux(r_cos), delta* 1e3)
-                    f_planet += shifted_quiet * limb
+                        if calc_rv == 1:
+                            delta = vrot(v, r_cos, y, z, alphaB, alphaC, i, cb1)
+                            shifted_quiet = doppler_shift(
+                                pixel.wave, pixel.flux(r_cos), delta * 1e3)
+                            sub_f[:-1] += shifted_quiet * limb
+
+            # Average over sub-cells to get cell contribution
+            if sub_count > 0:
+                weight = 1.0 / (n_sub * n_sub)
+                sum_planet += sub_limb * weight
+                f_planet   += sub_f    * weight
+
     f_planet[-1] = sum_planet
     return f_planet
-
 
 # ----------------------------------------------------------------------------------------------------------------
 
@@ -1806,6 +1886,7 @@ def precompile_functions():
 
     # Warm up ar_inverse_rotation
     ar_inverse_rotation(np.array([0.9, 0.1, 0.1]), 0.0, 0.0, 90.0, 0.0)
+    #ar_scan_flux(90,[0,0],1,2,0,)
 
     # Warm up planet functions
     planet_position_at_date(0.0, 10.0, 0.0, 0.0, 90.0, 90.0, 0.05, 90.0)
