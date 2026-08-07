@@ -42,7 +42,7 @@ def visualize(sim, out, plot_type, lim=None, ref_wave=None, plot_lims=None, show
         psi_i = out.psi
 
     # Grid resolution, geometry, and arrays (match animate)
-    grid_res = 0.0005
+    grid_res = 0.003
     Vsini = (2 * np.pi * sim.star.radius.value * 696340) / (sim.star.prot.value * 24 * 3600)
     i = np.radians(sim.star.incl.value)
 

@@ -893,7 +893,7 @@ class Simulation:
                 pixel_tot_np = np.tile(pixel_quiet, (psi.size, 1)) - out_np[3]
             else:
                 pixel_tot_np=np.tile(pixel_quiet, (psi.size, 1))
-            self.pixel_shadow=((pixel_tot_np-save_pixel_tot).T/np.max(pixel_quiet)).T
+            self.pixel_shadow=((pixel_tot_np-save_pixel_tot).T/np.max(save_pixel_tot)).T
             
 
 
@@ -984,7 +984,7 @@ class Simulation:
                 plt.plot(_rv, ccf_pixel_flux.T)
                 plt.show()
 
-            _ = self.get_results(_rv, ccf_pixel_flux, skip_fwhm, skip_bis)
+            _ = self.get_results(_rv, -ccf_pixel_flux, skip_fwhm, skip_bis)
             rv_flux, fwhm_flux, span_flux = _
             if template:
                 ccf_pixel_bconv = np.array(
@@ -1005,7 +1005,7 @@ class Simulation:
                     ]
                 )
 
-            _ = self.get_results(_rv, ccf_pixel_bconv, skip_fwhm, skip_bis)
+            _ = self.get_results(_rv, -ccf_pixel_bconv, skip_fwhm, skip_bis)
             rv_bconv, fwhm_bconv, span_bconv = _
             if template:
                 ccf_pixel_tot = np.array(
@@ -1027,7 +1027,7 @@ class Simulation:
                 )
             self.ccf=ccf_pixel_tot
             self.rv=_rv
-            _ = self.get_results(_rv, ccf_pixel_tot, skip_fwhm, skip_bis)
+            _ = self.get_results(_rv, -ccf_pixel_tot, skip_fwhm, skip_bis)
             rv_tot, fwhm_tot, span_tot = _
             if DEBUG:
                 plt.plot(rv_tot)
@@ -1100,9 +1100,7 @@ class Simulation:
 
                 slope_rvs = slope_coefs[0] * planet_phases + slope_coefs[1]
                 slope_flux= slope_flux_coefs[0] * planet_phases + slope_flux_coefs[1]
-                #import matplotlib.pyplot as plt
-                # plt.plot(FLUXstar/slope_flux)
-                # plt.show()
+
                 if DEBUG == True:
                     print("Slopes coefficients out-of-transit")
                     print(slope_coefs)
@@ -1115,7 +1113,7 @@ class Simulation:
 
                     corr_pixel_flux = np.array(
                         [
-                            stspnumba.doppler_shift(pixel.wave, pixel_tot[i], -slope_rvs[i])
+                            stspnumba.doppler_shift(pixel.wave, pixel_tot[i], -slope_rvs[i]*1000)
                             for i in range(len(pixel_tot))
                         ]
                     )
@@ -1133,6 +1131,7 @@ class Simulation:
                         for j in range(len(corr_pixel_flux))
                     ]
                 )
+
                 self.master_out_fw = np.mean(flux_weighted_spectra[phase_mask], axis=0)
                 self.integrated_spectra_fw = flux_weighted_spectra
 
@@ -1163,7 +1162,7 @@ class Simulation:
                 # shift by the Keplerian RV
                 for i in range(pixel_tot.shape[0]):
                     pixel_tot[i] = stspnumba.doppler_shift(
-                        pixel.wave, pixel_tot[i], rv_kep[i].value
+                        pixel.wave, pixel_tot[i], rv_kep[i].value*1000
                     )
             else:
                 # shift by the Keplerian RV
